@@ -87,7 +87,15 @@ https://github.com/wells-wood-research/timed/releases
 3. Finally run: 
 
 
+```
+python3 predict.py --path_to_dataset {DATASET_PATH}.hdf5 --path_to_model {MODEL_PATH}.h5
+```
 
+eg.
+
+```
+python3 predict.py --path_to_dataset dataset.hdf5 --path_to_model timed_2.h5
+```
 
 
 
