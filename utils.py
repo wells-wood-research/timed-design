@@ -383,7 +383,7 @@ def load_dataset_and_predict(
             del y_pred
         # Output datasetmap compatible with sequence recovery benchmark:
         with open(f"{model_name}.txt", "w") as f:
-            pdb_code, count = np.unique(flat_dataset_map[:, 0],
+            pdb_code, count = np.unique(np.array(flat_dataset_map)[:, 0],
                                         return_counts=True)
             srb_dataset_map = np.hstack((pdb_code, count))
             np.savetxt(f, srb_dataset_map, delimiter=",", fmt="%s")
