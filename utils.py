@@ -3,16 +3,16 @@ import h5py
 import sys
 import typing as t
 import warnings
+from collections import Counter
 from math import ceil
+from pathlib import Path
+from random import shuffle
 
 import numpy as np
 import tensorflow as tf
 from ampal.amino_acids import standard_amino_acids
-from collections import Counter
 from numpy import genfromtxt
-from pathlib import Path
-from random import shuffle
-
+from tqdm import tqdm
 
 from aposteriori.data_prep.create_frame_data_set import DatasetMetadata
 from aposteriori.config import UNCOMMON_RESIDUE_DICT, MAKE_FRAME_DATASET_VER
@@ -109,7 +109,7 @@ def get_pdb_keys_to_filter(
         # filter chain (we want to delete the whole structure, regardless of chain:
         for pdb in curr_keys_list:
             assert (
-                    len(pdb) == 4 or len(pdb) == 5
+                len(pdb) == 4 or len(pdb) == 5
             ), f"Malformed Dataset: Expected length of PDB code to be 4 or 5 but got {len(pdb)}"
             # Add to list:
             pdb_keys_list.append(pdb[:4])
@@ -261,6 +261,7 @@ def balance_dataset(
 
     return balanced_dataset_map
 
+
 def load_batch(
     dataset_path: Path, data_point_batch: t.List[t.Tuple]
 ) -> (np.ndarray, np.ndarray):
@@ -346,20 +347,26 @@ def load_dataset_and_predict(
         filter_pdb_list = []
     # If dataset map exists, load it from path:
     if Path(dataset_map_path).exists():
-        flat_dataset_map = np.genfromtxt(dataset_map_path, delimiter=",", dtype="str")
+        flat_dataset_map = genfromtxt(dataset_map_path, delimiter=",", dtype="str")
     else:
         # Create flat_map:
-        flat_dataset_map, training_set_pdbs = create_flat_dataset_map(dataset_path, filter_pdb_list)
+        flat_dataset_map, training_set_pdbs = create_flat_dataset_map(
+            dataset_path, filter_pdb_list
+        )
 
     # Calculate number of batches
     n_batches = ceil(len(flat_dataset_map) / batch_size)
     # For each model:
     for i, m in enumerate(models):
+        # Extract model names:
+        if isinstance(m, Path):
+            model_name = m.stem
+        else:
+            model_name = str(m)
         # Import Model:
         frame_model = tf.keras.models.load_model(m)
         # Load batch:
-        for index in range(start_batch, n_batches):
-            print(f"Working on batch {index} out of {n_batches} model {i} {m}")
+        for index in tqdm(range(start_batch, n_batches), desc=f"Processing batch of model {model_name}"):
             # Initialize array for predictions:
             y_true = []
             # Initialize dictionary with {model_number : [predictions]}
@@ -376,10 +383,16 @@ def load_dataset_and_predict(
             # Save current labels:
             y_true.extend(y_true_batch)
             # Save to output file:
-            save_outputs_to_file(y_true, y_pred, flat_dataset_map, i)
+            save_outputs_to_file(y_true, y_pred, flat_dataset_map, i, model_name)
             # Reset to avoid memory errors
             del y_true
             del y_pred
+        # Output datasetmap compatible with sequence recovery benchmark:
+        with open(f"{model_name}.txt", "w") as f:
+            pdb_code, count = np.unique(flat_dataset_map[:, 0],
+                                        return_counts=True)
+            srb_dataset_map = np.hstack((pdb_code, count))
+            np.savetxt(f, srb_dataset_map, delimiter=",", fmt="%s")
 
     return flat_dataset_map
 
@@ -389,6 +402,7 @@ def save_outputs_to_file(
     y_pred: np.ndarray,
     flat_dataset_map: t.List[t.Tuple],
     model: int,
+    model_name: str,
 ):
     """
     Saves predictions for a specific model to file.
@@ -404,19 +418,22 @@ def save_outputs_to_file(
         [... (pdb_code, chain_id, residue_id,  residue_label, encoded_residue) ...]
     model: int
         Number of the model being used.
-
+    model_name: int
+        Name of the model being used.
     """
     # Save dataset map only at the beginning:
     if model == 0:
         with open("encoded_labels.csv", "a") as f:
             y_true = np.asarray(y_true)
             np.savetxt(f, y_true, delimiter=",", fmt="%i")
+    flat_dataset_map = np.asarray(flat_dataset_map)
     # Save dataset map only at the beginning:
     if Path("datasetmap.txt").exists() == False:
         with open("datasetmap.txt", "a") as f:
-            # Output Dataset Map to CSV:
-            flat_dataset_map = np.asarray(flat_dataset_map)
+            # Output Dataset Map to txt:
             np.savetxt(f, flat_dataset_map, delimiter=",", fmt="%s")
+
+    predictions = np.array(y_pred[model], dtype=np.float16)
     # Output model predictions:
-    with open(f"output_{model}.csv", "a") as f:
-        np.savetxt(f, np.array(y_pred[model], dtype=np.float16), delimiter=",")
+    with open(f"{model_name}.csv", "a") as f:
+        np.savetxt(f, predictions, delimiter=",")

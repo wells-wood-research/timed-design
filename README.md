@@ -66,6 +66,11 @@ cd timed
 poetry install
 ```
 
+
+```shell
+pip install tqdm
+```
+
 ## Using the models for predicting
 
 1. Make a folder with all the pdb files you want to predict
