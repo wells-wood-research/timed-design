@@ -108,9 +108,6 @@ def get_pdb_keys_to_filter(
         curr_keys_list = genfromtxt(pdb_list_file, dtype=str)
         # filter chain (we want to delete the whole structure, regardless of chain:
         for pdb in curr_keys_list:
-            assert (
-                len(pdb) == 4 or len(pdb) == 5
-            ), f"Malformed Dataset: Expected length of PDB code to be 4 or 5 but got {len(pdb)}"
             # Add to list:
             pdb_keys_list.append(pdb[:4])
 
@@ -162,9 +159,6 @@ def create_flat_dataset_map(
         flat_dataset_map = []
         # Create flattened dataset structure:
         for pdb_code in dataset_file:
-            assert (
-                len(pdb_code) == 4 or len(pdb_code) == 5
-            ), f"Malformed Dataset: Expected length of PDB code to be 4 or 5 but got {len(pdb_code)}"
             # Check first 4 letters of PBD code in blacklist:
             if pdb_code[:4] not in filter_list:
                 for chain_id in dataset_file[pdb_code].keys():
