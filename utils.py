@@ -404,8 +404,12 @@ def load_dataset_and_predict(
             f"{model_name}.csv", delimiter=",", dtype=np.float16
         )
         # Save as Fasta file:
-        pdb_to_sequence, pdb_to_probability = extract_sequence_from_pred_matrix(flat_dataset_map, prediction_matrix)
+        pdb_to_sequence, pdb_to_probability, pdb_to_real_sequence = extract_sequence_from_pred_matrix(
+            flat_dataset_map, prediction_matrix
+        )
         save_dict_to_fasta(pdb_to_sequence, model_name)
+        save_dict_to_fasta(pdb_to_real_sequence, "dataset")
+
     return flat_dataset_map
 
 
@@ -425,7 +429,9 @@ def save_dict_to_fasta(pdb_to_sequence: dict, model_name: str):
             f.write(f">{pdb}\n{seq}\n")
 
 
-def extract_sequence_from_pred_matrix(flat_dataset_map: t.List[t.Tuple], prediction_matrix: np.ndarray) -> (dict, dict):
+def extract_sequence_from_pred_matrix(
+    flat_dataset_map: t.List[t.Tuple], prediction_matrix: np.ndarray
+) -> (dict, dict, dict):
     """
     Extract sequence from prediction matrix and create pdb_to_sequence and
     pdb_to_probability dictionaries
@@ -442,19 +448,29 @@ def extract_sequence_from_pred_matrix(flat_dataset_map: t.List[t.Tuple], predict
     -------
     pdb_to_sequence: dict
         Dictionary {pdb_code: predicted_sequence}
+    pdb_to_sequence: dict
+        Dictionary {pdb_code: sequence}
     pdb_to_probability: dict
         Dictionary {pdb_code: probability}
     """
     pdb_to_sequence = {}
     pdb_to_probability = {}
+    pdb_to_real_sequence = {}
+
     res_dic = list(standard_amino_acids.keys())
+    res_to_r_dic = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
     max_idx = np.argmax(prediction_matrix, axis=1)
 
     for i in range(len(flat_dataset_map)):
-        pdb, chain, _, _ = flat_dataset_map[i]
-        pdbchain = pdb+chain
+        pdb, chain, _, res = flat_dataset_map[i]
+        if "_" in pdb:
+            pdbchain = pdb
+        else:
+            pdbchain = pdb + chain
+
         if pdbchain not in pdb_to_sequence:
             pdb_to_sequence[pdbchain] = ""
+            pdb_to_real_sequence[pdbchain] = ""
             pdb_to_probability[pdbchain] = []
 
         pred = list(prediction_matrix[i])
@@ -462,8 +478,9 @@ def extract_sequence_from_pred_matrix(flat_dataset_map: t.List[t.Tuple], predict
 
         pdb_to_probability[pdbchain].append(pred)
         pdb_to_sequence[pdbchain] += curr_res
+        pdb_to_real_sequence[pdbchain] += res_to_r_dic[res]
 
-    return pdb_to_sequence, pdb_to_probability
+    return pdb_to_sequence, pdb_to_probability, pdb_to_real_sequence
 
 
 def save_outputs_to_file(
