@@ -162,7 +162,13 @@ def create_flat_dataset_map(
             # Check first 4 letters of PBD code in blacklist:
             if pdb_code[:4] not in filter_list:
                 for chain_id in dataset_file[pdb_code].keys():
-                    for residue_id in dataset_file[pdb_code][chain_id].keys():
+                    # Sort by residue int rather than str
+                    residue_n = np.array(
+                        list(dataset_file[pdb_code][chain_id].keys()), dtype=np.int
+                    )
+                    residue_n.sort()
+                    residue_n = np.array(residue_n, dtype=str)
+                    for residue_id in residue_n:
                         # Extract residue info:
                         residue_label = dataset_file[pdb_code][chain_id][
                             str(residue_id)
@@ -360,7 +366,10 @@ def load_dataset_and_predict(
         # Import Model:
         frame_model = tf.keras.models.load_model(m)
         # Load batch:
-        for index in tqdm(range(start_batch, n_batches), desc=f"Processing batch of model {model_name}"):
+        for index in tqdm(
+            range(start_batch, n_batches),
+            desc=f"Processing batch of model {model_name}",
+        ):
             # Initialize array for predictions:
             y_true = []
             # Initialize dictionary with {model_number : [predictions]}
@@ -381,14 +390,80 @@ def load_dataset_and_predict(
             # Reset to avoid memory errors
             del y_true
             del y_pred
+        flat_dataset_map = np.array(flat_dataset_map)
         # Output datasetmap compatible with sequence recovery benchmark:
         with open(f"{model_name}.txt", "w") as f:
-            pdb_code, count = np.unique(np.array(flat_dataset_map)[:, 0],
-                                        return_counts=True)
+            pdbcode_and_chain = np.core.defchararray.add(
+                flat_dataset_map[:, 0], flat_dataset_map[:, 1]
+            )
+            pdb_code, count = np.unique(pdbcode_and_chain, return_counts=True)
             srb_dataset_map = np.hstack((pdb_code, count))
-            np.savetxt(f, srb_dataset_map, delimiter=",", fmt="%s")
-
+            np.savetxt(f, srb_dataset_map, delimiter=" ", fmt="%s")
+        # Load prediction matrix
+        prediction_matrix = genfromtxt(
+            f"{model_name}.csv", delimiter=",", dtype=np.float16
+        )
+        # Save as Fasta file:
+        pdb_to_sequence, pdb_to_probability = extract_sequence_from_pred_matrix(flat_dataset_map, prediction_matrix)
+        save_dict_to_fasta(pdb_to_sequence, model_name)
     return flat_dataset_map
+
+
+def save_dict_to_fasta(pdb_to_sequence: dict, model_name: str):
+    """
+    Saves a dictionary of protein sequences to a fasta file.
+
+    Parameters
+    ----------
+    pdb_to_sequence: dict
+        Dictionary {pdb_code: predicted_sequence}
+    model_name: str
+        Name of the model.
+    """
+    with open(f"{model_name}.fasta", "w") as f:
+        for pdb, seq in pdb_to_sequence.items():
+            f.write(f">{pdb}\n{seq}\n")
+
+
+def extract_sequence_from_pred_matrix(flat_dataset_map: t.List[t.Tuple], prediction_matrix: np.ndarray) -> (dict, dict):
+    """
+    Extract sequence from prediction matrix and create pdb_to_sequence and
+    pdb_to_probability dictionaries
+
+    Parameters
+    ----------
+    flat_dataset_map: t.List[t.Tuple]
+        List of tuples with the order
+        [... (pdb_code, chain_id, residue_id,  residue_label, encoded_residue) ...]
+    prediction_matrix: np.ndarray
+        Prediction matrix for each of the sequence
+
+    Returns
+    -------
+    pdb_to_sequence: dict
+        Dictionary {pdb_code: predicted_sequence}
+    pdb_to_probability: dict
+        Dictionary {pdb_code: probability}
+    """
+    pdb_to_sequence = {}
+    pdb_to_probability = {}
+    res_dic = list(standard_amino_acids.keys())
+    max_idx = np.argmax(prediction_matrix, axis=1)
+
+    for i in range(len(flat_dataset_map)):
+        pdb, chain, _, _ = flat_dataset_map[i]
+        pdbchain = pdb+chain
+        if pdbchain not in pdb_to_sequence:
+            pdb_to_sequence[pdbchain] = ""
+            pdb_to_probability[pdbchain] = []
+
+        pred = list(prediction_matrix[i])
+        curr_res = res_dic[max_idx[i]]
+
+        pdb_to_probability[pdbchain].append(pred)
+        pdb_to_sequence[pdbchain] += curr_res
+
+    return pdb_to_sequence, pdb_to_probability
 
 
 def save_outputs_to_file(
