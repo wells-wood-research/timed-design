@@ -3,10 +3,8 @@ import h5py
 import sys
 import typing as t
 import warnings
-from collections import Counter
 from math import ceil
 from pathlib import Path
-from random import shuffle
 
 import numpy as np
 import tensorflow as tf
@@ -359,7 +357,7 @@ def load_dataset_and_predict(
         save_dict_to_fasta(pdb_to_real_sequence, "dataset")
         if pdb_to_consensus:
             save_dict_to_fasta(pdb_to_real_sequence, model_name+"_consensus")
-            save_consensus_probs(pdb_to_consensus_prob, model_name+"_consensus")
+            save_consensus_probs(pdb_to_consensus_prob, model_name)
 
     return flat_dataset_map
 
@@ -393,6 +391,7 @@ def save_dict_to_fasta(pdb_to_sequence: dict, model_name: str):
         Name of the model.
     """
     with open(f"{model_name}.fasta", "w") as f:
+        f.write("ignore_uncommon False\ninclude_pdbs\n##########\n")
         for pdb, seq in pdb_to_sequence.items():
             f.write(f">{pdb}\n{seq}\n")
 
