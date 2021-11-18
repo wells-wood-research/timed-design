@@ -415,6 +415,7 @@ def load_dataset_and_predict(
         save_dict_to_fasta(pdb_to_real_sequence, "dataset")
         if pdb_to_consensus:
             save_dict_to_fasta(pdb_to_real_sequence, model_name+"_consensus")
+            save_consensus_probs(pdb_to_consensus_prob, model_name+"_consensus")
 
     return flat_dataset_map
 
