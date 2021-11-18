@@ -514,7 +514,7 @@ def extract_sequence_from_pred_matrix(
         # Sum up probabilities:
         for pdb in pdb_to_sequence.keys():
             curr_pdb = pdb[:5]
-            if last_pdb != last_pdb:
+            if last_pdb != curr_pdb:
                 pdb_to_consensus[curr_pdb] = ""
                 pdb_to_consensus_prob[curr_pdb] = np.array(pdb_to_probability[pdb])
                 last_pdb = curr_pdb
