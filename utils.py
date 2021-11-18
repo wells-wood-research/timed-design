@@ -404,13 +404,36 @@ def load_dataset_and_predict(
             f"{model_name}.csv", delimiter=",", dtype=np.float16
         )
         # Save as Fasta file:
-        pdb_to_sequence, pdb_to_probability, pdb_to_real_sequence = extract_sequence_from_pred_matrix(
-            flat_dataset_map, prediction_matrix
-        )
+        (
+            pdb_to_sequence,
+            pdb_to_probability,
+            pdb_to_real_sequence,
+            pdb_to_consensus,
+            pdb_to_consensus_prob,
+        ) = extract_sequence_from_pred_matrix(flat_dataset_map, prediction_matrix)
         save_dict_to_fasta(pdb_to_sequence, model_name)
         save_dict_to_fasta(pdb_to_real_sequence, "dataset")
+        if pdb_to_consensus:
+            save_dict_to_fasta(pdb_to_real_sequence, model_name+"_consensus")
 
     return flat_dataset_map
+
+
+def save_consensus_probs(pdb_to_consensus_prob: dict, model_name:str):
+    """
+    Saves consensus sequence into PDBench-compatible format.
+
+    Parameters
+    ----------
+    pdb_to_consensus_prob: dict
+
+    model_name: dict
+
+    """
+    with open(f"{model_name}_consensus.txt", 'w') as d, open(f"{model_name}_consensus.csv", 'a') as p:
+        for pdb, predictions in pdb_to_consensus_prob.items():
+            d.write(f"{pdb} {len(predictions)}\n")
+            np.savetxt(p, predictions, delimiter=",")
 
 
 def save_dict_to_fasta(pdb_to_sequence: dict, model_name: str):
@@ -431,7 +454,7 @@ def save_dict_to_fasta(pdb_to_sequence: dict, model_name: str):
 
 def extract_sequence_from_pred_matrix(
     flat_dataset_map: t.List[t.Tuple], prediction_matrix: np.ndarray
-) -> (dict, dict, dict):
+) -> (dict, dict, dict, dict, dict):
     """
     Extract sequence from prediction matrix and create pdb_to_sequence and
     pdb_to_probability dictionaries
@@ -456,6 +479,10 @@ def extract_sequence_from_pred_matrix(
     pdb_to_sequence = {}
     pdb_to_probability = {}
     pdb_to_real_sequence = {}
+    pdb_to_consensus = {}
+    pdb_to_consensus_prob = {}
+    # Wether the dataset contains multiple states of NMR or not
+    is_consensus = False
 
     res_dic = list(standard_amino_acids.keys())
     res_to_r_dic = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
@@ -465,6 +492,7 @@ def extract_sequence_from_pred_matrix(
         pdb, chain, _, res = flat_dataset_map[i]
         if "_" in pdb:
             pdbchain = pdb
+            is_consensus = True
         else:
             pdbchain = pdb + chain
 
@@ -480,7 +508,36 @@ def extract_sequence_from_pred_matrix(
         pdb_to_sequence[pdbchain] += curr_res
         pdb_to_real_sequence[pdbchain] += res_to_r_dic[res]
 
-    return pdb_to_sequence, pdb_to_probability, pdb_to_real_sequence
+    if is_consensus:
+        last_pdb = ""
+        # Sum up probabilities:
+        for pdb in pdb_to_sequence.keys():
+            curr_pdb = pdb[:5]
+            if last_pdb != last_pdb:
+                pdb_to_consensus[curr_pdb] = ""
+                pdb_to_consensus_prob[curr_pdb] = np.array(pdb_to_probability[pdb])
+                last_pdb = curr_pdb
+            else:
+                pdb_to_consensus_prob[curr_pdb] = (
+                    pdb_to_consensus_prob[curr_pdb] + np.array(pdb_to_probability[pdb])
+                ) / 2
+        # Extract sequences from consensus probabilities:
+        for pdb in pdb_to_consensus.keys():
+            curr_prob = pdb_to_consensus_prob[pdb]
+            max_idx = np.argmax(curr_prob, axis=1)
+            for m in max_idx:
+                curr_res = res_dic[max_idx[m]]
+                pdb_to_consensus[pdb] += curr_res
+
+        return (
+            pdb_to_sequence,
+            pdb_to_probability,
+            pdb_to_real_sequence,
+            pdb_to_consensus,
+            pdb_to_consensus_prob,
+        )
+    else:
+        return pdb_to_sequence, pdb_to_probability, pdb_to_real_sequence, None, None
 
 
 def save_outputs_to_file(
