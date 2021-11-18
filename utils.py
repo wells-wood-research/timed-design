@@ -206,62 +206,6 @@ def create_flat_dataset_map(
     return flat_dataset_map, training_set_pdbs
 
 
-def balance_dataset(
-    flat_dataset_map: t.List[t.Tuple[str, int, str, str]]
-) -> t.List[t.Tuple[str, int, str, str]]:
-    """
-    Balances the dataset by undersampling the least present residue.
-
-    Parameters
-    ----------
-    flat_dataset_map: t.List[t.Tuple]
-        List of tuples with the order
-        [... (pdb_code, chain_id, residue_id,  residue_label) ...]
-
-    Returns
-    -------
-    balanced_dataset_map: t.List[t.Tuple]
-        Balanced list of tuples with the order
-        [... (pdb_code, chain_id, residue_id,  residue_label) ...].
-        This is balanced by undersampling.
-    """
-    flat_dataset_map_copy = copy.copy(flat_dataset_map)
-    # Randomize appearance of frames
-    shuffle(flat_dataset_map_copy)
-    # List all resiudes:
-    standard_residues = list(standard_amino_acids.values())
-    # Extract residues and append to a dictionary using the residue as key:
-    dataset_dict = {r: [] for r in standard_residues}
-
-    all_residues_in_dataset = []
-    for res_map in flat_dataset_map_copy:
-        res = res_map[-1]
-        dataset_dict[res].append(res_map)
-        all_residues_in_dataset.append(res)
-    # Count all residues and calculate the maximum number of residue per class:
-    counted_residue_in_dataset = Counter(all_residues_in_dataset)
-    # Count how many residues to extract per class:
-    max_res_num = counted_residue_in_dataset[
-        min(counted_residue_in_dataset, key=counted_residue_in_dataset.get)
-    ]
-    # Extract residue from dataset:
-    balanced_dataset_map = []
-    for residue in standard_residues:
-        # Extract and append relevant residue:
-        balanced_dataset_map += dataset_dict[residue][:max_res_num]
-    # Check whether the total number of residues is correct:
-    assert (
-        len(balanced_dataset_map) == 20 * max_res_num
-    ), f"Expected balanced dataset to be {20 * max_res_num} but got {len(balanced_dataset_map)}"
-    # Check whether the number of residues per class is correct:
-    all_balanced_residues = [res[-1] for res in balanced_dataset_map]
-    assert Counter(list(standard_amino_acids.values()) * max_res_num) == Counter(
-        all_balanced_residues
-    )
-
-    return balanced_dataset_map
-
-
 def load_batch(
     dataset_path: Path, data_point_batch: t.List[t.Tuple]
 ) -> (np.ndarray, np.ndarray):
