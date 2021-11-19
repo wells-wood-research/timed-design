@@ -356,7 +356,7 @@ def load_dataset_and_predict(
         save_dict_to_fasta(pdb_to_sequence, model_name)
         save_dict_to_fasta(pdb_to_real_sequence, "dataset")
         if pdb_to_consensus:
-            save_dict_to_fasta(pdb_to_real_sequence, model_name+"_consensus")
+            save_dict_to_fasta(pdb_to_consensus, model_name+"_consensus")
             save_consensus_probs(pdb_to_consensus_prob, model_name)
 
     return flat_dataset_map
@@ -374,6 +374,7 @@ def save_consensus_probs(pdb_to_consensus_prob: dict, model_name:str):
 
     """
     with open(f"{model_name}_consensus.txt", 'w') as d, open(f"{model_name}_consensus.csv", 'a') as p:
+        d.write("ignore_uncommon False\ninclude_pdbs\n##########\n")
         for pdb, predictions in pdb_to_consensus_prob.items():
             d.write(f"{pdb} {len(predictions)}\n")
             np.savetxt(p, predictions, delimiter=",")
@@ -391,7 +392,6 @@ def save_dict_to_fasta(pdb_to_sequence: dict, model_name: str):
         Name of the model.
     """
     with open(f"{model_name}.fasta", "w") as f:
-        f.write("ignore_uncommon False\ninclude_pdbs\n##########\n")
         for pdb, seq in pdb_to_sequence.items():
             f.write(f">{pdb}\n{seq}\n")
 
@@ -456,9 +456,8 @@ def extract_sequence_from_pred_matrix(
         last_pdb = ""
         # Sum up probabilities:
         for pdb in pdb_to_sequence.keys():
-            curr_pdb = pdb[:5]
+            curr_pdb = pdb.split('_')[0]
             if last_pdb != curr_pdb:
-                pdb_to_consensus[curr_pdb] = ""
                 pdb_to_consensus_prob[curr_pdb] = np.array(pdb_to_probability[pdb])
                 last_pdb = curr_pdb
             else:
@@ -466,7 +465,8 @@ def extract_sequence_from_pred_matrix(
                     pdb_to_consensus_prob[curr_pdb] + np.array(pdb_to_probability[pdb])
                 ) / 2
         # Extract sequences from consensus probabilities:
-        for pdb in pdb_to_consensus.keys():
+        for pdb in pdb_to_consensus_prob.keys():
+            pdb_to_consensus[pdb] = ''
             curr_prob = pdb_to_consensus_prob[pdb]
             max_idx = np.argmax(curr_prob, axis=1)
             for m in max_idx:
