@@ -470,7 +470,7 @@ def extract_sequence_from_pred_matrix(
             curr_prob = pdb_to_consensus_prob[pdb]
             max_idx = np.argmax(curr_prob, axis=1)
             for m in max_idx:
-                curr_res = res_dic[max_idx[m]]
+                curr_res = res_dic[m]
                 pdb_to_consensus[pdb] += curr_res
 
         return (
