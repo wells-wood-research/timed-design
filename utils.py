@@ -334,13 +334,7 @@ def load_dataset_and_predict(
             del y_pred
         flat_dataset_map = np.array(flat_dataset_map)
         # Output datasetmap compatible with sequence recovery benchmark:
-        with open(f"{model_name}.txt", "w") as f:
-            pdbcode_and_chain = np.core.defchararray.add(
-                flat_dataset_map[:, 0], flat_dataset_map[:, 1]
-            )
-            pdb_code, count = np.unique(pdbcode_and_chain, return_counts=True)
-            srb_dataset_map = np.hstack((pdb_code, count))
-            np.savetxt(f, srb_dataset_map, delimiter=" ", fmt="%s")
+        convert_dataset_map_for_srb(flat_dataset_map, model_name)
         # Load prediction matrix
         prediction_matrix = genfromtxt(
             f"{model_name}.csv", delimiter=",", dtype=np.float16
@@ -360,6 +354,38 @@ def load_dataset_and_predict(
             save_consensus_probs(pdb_to_consensus_prob, model_name)
 
     return flat_dataset_map
+
+
+def convert_dataset_map_for_srb(flat_dataset_map: list, model_name:str):
+    """
+
+    Parameters
+    ----------
+    flat_dataset_map
+    model_name
+
+    Returns
+    -------
+
+    """
+    with open(f"{model_name}.txt", 'w') as d:
+        d.write("ignore_uncommon False\ninclude_pdbs\n##########\n")
+        curr_pdb = ""
+        count = 0
+        for i, (pdb, chain, res_idx, _) in enumerate(flat_dataset_map):
+            if "_0" in pdb:
+                pdb = pdb.split('_0')[0]
+            if i == 0:
+                curr_pdb = pdb + chain
+            pdb_chain = pdb + chain
+
+            if pdb_chain != curr_pdb:
+                if count > 0:
+                    d.write(f"{curr_pdb} {count}\n")
+                count = 0
+
+            curr_pdb = pdb_chain
+            count += 1
 
 
 def save_consensus_probs(pdb_to_consensus_prob: dict, model_name:str):
