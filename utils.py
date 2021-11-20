@@ -375,9 +375,14 @@ def convert_dataset_map_for_srb(flat_dataset_map: list, model_name:str):
         for i, (pdb, chain, res_idx, _) in enumerate(flat_dataset_map):
             if "_0" in pdb:
                 pdb = pdb.split('_0')[0]
-            if i == 0:
-                curr_pdb = pdb + chain
-            pdb_chain = pdb + chain
+            if len(pdb) == 5:
+                if i == 0:
+                    curr_pdb = pdb
+                else:
+                    curr_pdb = pdb + chain
+                pdb_chain = pdb
+            else:
+                pdb_chain = pdb + chain
 
             if pdb_chain != curr_pdb:
                 if count > 0:
