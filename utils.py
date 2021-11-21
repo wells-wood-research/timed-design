@@ -356,7 +356,7 @@ def load_dataset_and_predict(
     return flat_dataset_map
 
 
-def convert_dataset_map_for_srb(flat_dataset_map: list, model_name:str):
+def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str):
     """
 
     Parameters
@@ -368,26 +368,21 @@ def convert_dataset_map_for_srb(flat_dataset_map: list, model_name:str):
     -------
 
     """
+    count_dict = {}
+    for i, (pdb, chain, res_idx, _) in enumerate(flat_dataset_map):
+        if "_0" in pdb:
+            pdb = pdb.split('_0')[0]
+        if len(pdb) == 4:
+            pdb += chain
+        if pdb not in count_dict:
+            count_dict[pdb] = 0
+
+        count_dict[pdb] += 1
+
     with open(f"{model_name}.txt", 'w') as d:
         d.write("ignore_uncommon False\ninclude_pdbs\n##########\n")
-        curr_pdb = ""
-        count = 0
-        for i, (pdb, chain, res_idx, _) in enumerate(flat_dataset_map):
-            if "_0" in pdb:
-                pdb = pdb.split('_0')[0]
-            if len(pdb) == 5:
-                curr_pdb = pdb
-                pdb_chain = pdb
-            else:
-                pdb_chain = pdb + chain
-
-            if pdb_chain != curr_pdb:
-                if count > 0:
-                    d.write(f"{curr_pdb} {count}\n")
-                count = 0
-
-            curr_pdb = pdb_chain
-            count += 1
+        for pdb, count in count_dict.items():
+            d.write(f"{pdb} {count}\n")
 
 
 def save_consensus_probs(pdb_to_consensus_prob: dict, model_name:str):
@@ -466,7 +461,10 @@ def extract_sequence_from_pred_matrix(
             pdbchain = pdb
             is_consensus = True
         else:
-            pdbchain = pdb + chain
+            if len(pdb) == 5:
+                pdbchain = pdb
+            else:
+                pdbchain = pdb + chain
 
         if pdbchain not in pdb_to_sequence:
             pdb_to_sequence[pdbchain] = ""
