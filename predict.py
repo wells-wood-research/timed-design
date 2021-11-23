@@ -22,13 +22,21 @@ def main(args):
     assert (
         args.batch_size > 0
     ), f"Batch size must be higher than 0 but got {args.batch_size}"
-    _ = load_dataset_and_predict(
+    (
+        flat_dataset_map,
+        pdb_to_sequence,
+        pdb_to_probability,
+        pdb_to_real_sequence,
+        pdb_to_consensus,
+        pdb_to_consensus_prob,
+    ) = load_dataset_and_predict(
         [args.path_to_model],
         args.path_to_dataset,
         batch_size=args.batch_size,
         start_batch=0,
         blacklist=args.path_to_blacklist,
     )
+
 
 
 if __name__ == "__main__":
@@ -46,7 +54,16 @@ if __name__ == "__main__":
         "--path_to_model", type=str, help="Path to model file ending with .h5"
     )
     parser.add_argument(
-        "--path_to_blacklist", type=str, default=None, help="Path to csv file containing PDBs in the training set."
+        "--path_to_blacklist",
+        type=str,
+        default=None,
+        help="Path to csv file containing PDBs in the training set.",
+    )
+    parser.add_argument(
+        "--output_analysis",
+        type=bool,
+        default=True,
+        help="Whether to output analysis graphs.",
     )
     params = parser.parse_args()
     main(params)

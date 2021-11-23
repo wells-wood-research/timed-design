@@ -255,7 +255,7 @@ def load_dataset_and_predict(
     start_batch: int = 0,
     dataset_map_path: Path = "dataset",
     blacklist: Path = None,
-) -> np.ndarray:
+) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
     """
     Load discretized frame dataset (should be the same format as the trained models),
     creates a dataset map and predicts the frames using each of the models.
@@ -280,7 +280,7 @@ def load_dataset_and_predict(
     flat_dataset_map: t.List[t.Tuple]
         List of tuples with the order
         [... (pdb_code, chain_id, residue_id,  residue_label, encoded_residue) ...]
-
+    # TODO Add fix
     """
     # Get list of banned pdbs from the benchmark:
     if blacklist:
@@ -350,11 +350,17 @@ def load_dataset_and_predict(
         save_dict_to_fasta(pdb_to_sequence, model_name)
         save_dict_to_fasta(pdb_to_real_sequence, "dataset")
         if pdb_to_consensus:
-            save_dict_to_fasta(pdb_to_consensus, model_name+"_consensus")
+            save_dict_to_fasta(pdb_to_consensus, model_name + "_consensus")
             save_consensus_probs(pdb_to_consensus_prob, model_name)
 
-    return flat_dataset_map
-
+    return (
+        flat_dataset_map,
+        pdb_to_sequence,
+        pdb_to_probability,
+        pdb_to_real_sequence,
+        pdb_to_consensus,
+        pdb_to_consensus_prob,
+    )
 
 def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str):
     """
@@ -371,7 +377,7 @@ def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str):
     count_dict = {}
     for i, (pdb, chain, res_idx, _) in enumerate(flat_dataset_map):
         if "_0" in pdb:
-            pdb = pdb.split('_0')[0]
+            pdb = pdb.split("_0")[0]
         if len(pdb) == 4:
             pdb += chain
         if pdb not in count_dict:
@@ -379,13 +385,13 @@ def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str):
 
         count_dict[pdb] += 1
 
-    with open(f"{model_name}.txt", 'w') as d:
+    with open(f"{model_name}.txt", "w") as d:
         d.write("ignore_uncommon False\ninclude_pdbs\n##########\n")
         for pdb, count in count_dict.items():
             d.write(f"{pdb} {count}\n")
 
 
-def save_consensus_probs(pdb_to_consensus_prob: dict, model_name:str):
+def save_consensus_probs(pdb_to_consensus_prob: dict, model_name: str):
     """
     Saves consensus sequence into PDBench-compatible format.
 
@@ -396,7 +402,9 @@ def save_consensus_probs(pdb_to_consensus_prob: dict, model_name:str):
     model_name: dict
 
     """
-    with open(f"{model_name}_consensus.txt", 'w') as d, open(f"{model_name}_consensus.csv", 'a') as p:
+    with open(f"{model_name}_consensus.txt", "w") as d, open(
+        f"{model_name}_consensus.csv", "a"
+    ) as p:
         d.write("ignore_uncommon False\ninclude_pdbs\n##########\n")
         for pdb, predictions in pdb_to_consensus_prob.items():
             d.write(f"{pdb} {len(predictions)}\n")
@@ -482,7 +490,7 @@ def extract_sequence_from_pred_matrix(
         last_pdb = ""
         # Sum up probabilities:
         for pdb in pdb_to_sequence.keys():
-            curr_pdb = pdb.split('_')[0]
+            curr_pdb = pdb.split("_")[0]
             if last_pdb != curr_pdb:
                 pdb_to_consensus_prob[curr_pdb] = np.array(pdb_to_probability[pdb])
                 last_pdb = curr_pdb
@@ -492,7 +500,7 @@ def extract_sequence_from_pred_matrix(
                 ) / 2
         # Extract sequences from consensus probabilities:
         for pdb in pdb_to_consensus_prob.keys():
-            pdb_to_consensus[pdb] = ''
+            pdb_to_consensus[pdb] = ""
             curr_prob = pdb_to_consensus_prob[pdb]
             max_idx = np.argmax(curr_prob, axis=1)
             for m in max_idx:
