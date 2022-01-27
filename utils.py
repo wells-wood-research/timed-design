@@ -204,8 +204,50 @@ def create_flat_dataset_map(
     return flat_dataset_map, training_set_pdbs
 
 
+def get_rotamer_codec() -> dict:
+    """
+    Creates a codec for tagging residues rotamers.
+    Returns
+    -------
+    res_rot_to_encoding: dict
+        Rotamer residues encoding of the format {1_letter_res : {rotamer_tuple: encoding}}
+    """
+    res_rot_to_encoding = {}
+    flat_categories = []
+    all_count = 338
+    r_count = 0  # Number of rotamers processed so far
+    for a, res in standard_amino_acids.items():
+        if res in side_chain_dihedrals:
+            n_rot = len(side_chain_dihedrals[res])
+            all_rotamers = list(product([1, 2, 3], repeat=n_rot))
+            encoding = np.arange(r_count, r_count + len(all_rotamers))
+            onehot_encoding = np.zeros((len(all_rotamers), all_count))
+            # Encodings are sorted so we can do encoding encoding
+            onehot_encoding[np.arange(0, len(encoding)), encoding] = 1
+            rot_to_encoding = dict(zip(all_rotamers, onehot_encoding))
+            res_rot_to_encoding[res] = rot_to_encoding
+            all_rotamers = np.array(all_rotamers, dtype=str)
+            for rota in all_rotamers:
+                flat_categories.append(f"{a}_{''.join(rota)}")
+            r_count += len(all_rotamers)
+        # No rotamers available:
+        else:
+            n_rot = 1
+            onehot_encoding = np.array([0] * all_count)
+            onehot_encoding[r_count] = 1
+            rot_to_encoding = {(0,): onehot_encoding}
+            res_rot_to_encoding[res] = rot_to_encoding
+            flat_categories.append(f"{a}_0")
+            r_count += n_rot
+
+    return res_rot_to_encoding, flat_categories
+
+
 def load_batch(
-    dataset_path: Path, data_point_batch: t.List[t.Tuple]
+    dataset_path: Path,
+    data_point_batch: t.List[t.Tuple],
+    predict_rotamers: bool,
+    codec: dict = None,
 ) -> (np.ndarray, np.ndarray):
     """
     Load batch from a dataset map.
@@ -223,10 +265,12 @@ def load_batch(
         5D frames with (batch_size, n, n, n, n_encoding) shape
     y: np.ndarray
         Array of shape (batch_size, 20) containing labels of frames
+        or (batch_size, 338) if predict_rotamers=True
 
     """
     # Calcualte catch size
     batch_size = len(data_point_batch)
+    remove_idx = []
     # Open hdf5:
     with h5py.File(str(dataset_path), "r") as dataset:
         dims = dataset.attrs["frame_dims"]
@@ -236,15 +280,35 @@ def load_batch(
             X = np.empty((batch_size, *dims), dtype=float)
         else:
             X = np.empty((batch_size, *dims), dtype=bool)
-        y = np.empty((batch_size, 20), dtype=float)
+        if predict_rotamers:
+            y = np.zeros((self.batch_size, 338), dtype=bool)
+        else:
+            y = np.empty((batch_size, 20), dtype=float)
         # Extract frame from batch:
         for i, (pdb_code, chain_id, residue_id, _) in enumerate(data_point_batch):
             # Extract frame:
             residue_frame = np.asarray(dataset[pdb_code][chain_id][residue_id][()])
             X[i] = residue_frame
             # Extract residue label:
-            y[i] = dataset[pdb_code][chain_id][residue_id].attrs["encoded_residue"]
-
+            if predict_rotamers:
+                res_label = dataset[pdb_code][chain_id][residue_id].attrs["label"]
+                rot = dataset[pdb_code][chain_id][residue_id].attrs["rotamers"]
+                if (
+                    res_label in self.rotamer_codec
+                    and rot != "-1"
+                    and rot.upper() != "NAN"
+                ):
+                    y[i] = self.rotamer_codec[res_label][
+                        tuple(np.array(list(rot), dtype=int).tolist())
+                    ]
+                else:
+                    remove_idx.append(i)
+            else:
+                y[i] = dataset[pdb_code][chain_id][residue_id].attrs["encoded_residue"]
+    # Remove empty rotamers:
+    if predict_rotamers:
+        X = np.delete(X, remove_idx, axis=0)
+        y = np.delete(y, remove_idx, axis=0)
     return X, y
 
 
@@ -255,6 +319,7 @@ def load_dataset_and_predict(
     start_batch: int = 0,
     dataset_map_path: Path = "dataset",
     blacklist: Path = None,
+    predict_rotamers: bool = False,
 ) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
     """
     Load discretized frame dataset (should be the same format as the trained models),
@@ -280,7 +345,6 @@ def load_dataset_and_predict(
     flat_dataset_map: t.List[t.Tuple]
         List of tuples with the order
         [... (pdb_code, chain_id, residue_id,  residue_label, encoded_residue) ...]
-    # TODO Add fix
     """
     # Get list of banned pdbs from the benchmark:
     if blacklist:
@@ -295,7 +359,8 @@ def load_dataset_and_predict(
         flat_dataset_map, training_set_pdbs = create_flat_dataset_map(
             dataset_path, filter_pdb_list
         )
-
+    if predict_rotamers:
+        codec, _ = get_rotamer_codec()
     # Calculate number of batches
     n_batches = ceil(len(flat_dataset_map) / batch_size)
     # For each model:
@@ -320,7 +385,12 @@ def load_dataset_and_predict(
             current_batch_map = flat_dataset_map[
                 index * batch_size : (index + 1) * batch_size
             ]
-            X_batch, y_true_batch = load_batch(dataset_path, current_batch_map)
+            X_batch, y_true_batch = load_batch(
+                dataset_path,
+                current_batch_map,
+                predict_rotamers,
+                codec if predict_rotamers else None,
+            )
             # Make Predictions
             y_pred_batch = frame_model.predict(X_batch)
             # Add predictions labels to dictionary:
@@ -361,6 +431,7 @@ def load_dataset_and_predict(
         pdb_to_consensus,
         pdb_to_consensus_prob,
     )
+
 
 def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str):
     """

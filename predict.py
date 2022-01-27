@@ -35,6 +35,7 @@ def main(args):
         batch_size=args.batch_size,
         start_batch=0,
         blacklist=args.path_to_blacklist,
+        predict_rotamers=args.predict_rotamers,
     )
 
 
@@ -64,6 +65,12 @@ if __name__ == "__main__":
         type=bool,
         default=True,
         help="Whether to output analysis graphs.",
+    )
+    parser.add_argument(
+        "--predict_rotamers",
+        type=bool,
+        default=False,
+        help="Whether model outputs predictions for rotamers (True) or 20 residues (False).",
     )
     params = parser.parse_args()
     main(params)
