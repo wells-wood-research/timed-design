@@ -282,7 +282,7 @@ def load_batch(
         else:
             X = np.empty((batch_size, *dims), dtype=bool)
         if predict_rotamers:
-            y = np.zeros((self.batch_size, 338), dtype=bool)
+            y = np.zeros((batch_size, 338), dtype=bool)
         else:
             y = np.empty((batch_size, 20), dtype=float)
         # Extract frame from batch:
@@ -295,11 +295,11 @@ def load_batch(
                 res_label = dataset[pdb_code][chain_id][residue_id].attrs["label"]
                 rot = dataset[pdb_code][chain_id][residue_id].attrs["rotamers"]
                 if (
-                    res_label in self.rotamer_codec
+                    res_label in codec
                     and rot != "-1"
                     and rot.upper() != "NAN"
                 ):
-                    y[i] = self.rotamer_codec[res_label][
+                    y[i] = codec[res_label][
                         tuple(np.array(list(rot), dtype=int).tolist())
                     ]
                 else:
