@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import tensorflow as tf
-from ampal.amino_acids import standard_amino_acids
+from ampal.amino_acids import standard_amino_acids, side_chain_dihedrals
 from numpy import genfromtxt
 from tqdm import tqdm
 
