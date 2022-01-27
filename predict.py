@@ -7,6 +7,7 @@ from utils import load_dataset_and_predict
 def main(args):
     args.path_to_dataset = Path(args.path_to_dataset)
     args.path_to_model = Path(args.path_to_model)
+    args.path_to_datasetmap = Path(args.path_to_datasetmap)
     if args.path_to_blacklist:
         args.path_to_blacklist = Path(args.path_to_blacklist)
         assert (
@@ -35,6 +36,7 @@ def main(args):
         batch_size=args.batch_size,
         start_batch=0,
         blacklist=args.path_to_blacklist,
+        dataset_map_path=args.path_to_datasetmap,
         predict_rotamers=args.predict_rotamers,
     )
 
@@ -50,6 +52,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--path_to_dataset", type=str, help="Path to dataset file ending with .hdf5"
+    )
+    parser.add_argument(
+        "--path_to_datasetmap", default="datasetmap.txt", type=str, help="Path to dataset map ending with .txt"
     )
     parser.add_argument(
         "--path_to_model", type=str, help="Path to model file ending with .h5"

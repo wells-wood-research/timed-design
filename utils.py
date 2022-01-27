@@ -317,7 +317,7 @@ def load_dataset_and_predict(
     dataset_path: Path,
     batch_size: int = 20,
     start_batch: int = 0,
-    dataset_map_path: Path = "dataset",
+    dataset_map_path: Path = "datasetmap.txt",
     blacklist: Path = None,
     predict_rotamers: bool = False,
 ) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
