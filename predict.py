@@ -75,7 +75,7 @@ if __name__ == "__main__":
         "--predict_rotamers",
         type=bool,
         default=False,
-        help="Whether model outputs predictions for rotamers (True) or 20 residues (False).",
+        help="Whether model outputs predictions for 338 rotamers (True) or 20 residues (False).",
     )
     params = parser.parse_args()
     main(params)

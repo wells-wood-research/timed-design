@@ -215,9 +215,10 @@ def get_rotamer_codec() -> dict:
     """
     res_rot_to_encoding = {}
     flat_categories = []
+    rot_to_20res = {}
     all_count = 338
     r_count = 0  # Number of rotamers processed so far
-    for a, res in standard_amino_acids.items():
+    for i, (a, res) in enumerate(standard_amino_acids.items()):
         if res in side_chain_dihedrals:
             n_rot = len(side_chain_dihedrals[res])
             all_rotamers = list(product([1, 2, 3], repeat=n_rot))
@@ -228,8 +229,10 @@ def get_rotamer_codec() -> dict:
             rot_to_encoding = dict(zip(all_rotamers, onehot_encoding))
             res_rot_to_encoding[res] = rot_to_encoding
             all_rotamers = np.array(all_rotamers, dtype=str)
-            for rota in all_rotamers:
+            for r, rota in enumerate(all_rotamers):
                 flat_categories.append(f"{a}_{''.join(rota)}")
+                rot_to_20res[r_count+r] = np.array([0]*20)
+                rot_to_20res[r_count+r][i] = 1
             r_count += len(all_rotamers)
         # No rotamers available:
         else:
@@ -240,15 +243,15 @@ def get_rotamer_codec() -> dict:
             res_rot_to_encoding[res] = rot_to_encoding
             flat_categories.append(f"{a}_0")
             r_count += n_rot
+            rot_to_20res[r_count] = np.array([0]*20)
+            rot_to_20res[r_count][i] = 1
 
-    return res_rot_to_encoding, flat_categories
+    return rot_to_20res, flat_categories
 
 
 def load_batch(
     dataset_path: Path,
     data_point_batch: t.List[t.Tuple],
-    predict_rotamers: bool,
-    codec: dict = None,
 ) -> (np.ndarray, np.ndarray):
     """
     Load batch from a dataset map.
@@ -278,38 +281,17 @@ def load_batch(
         voxels_as_gaussian = dataset.attrs["voxels_as_gaussian"]
         # Initialize X and y:
         if voxels_as_gaussian:
-            X = np.empty((batch_size, *dims), dtype=float)
+            X = np.zeros((batch_size, *dims), dtype=float)
         else:
-            X = np.empty((batch_size, *dims), dtype=bool)
-        if predict_rotamers:
-            y = np.zeros((batch_size, 338), dtype=bool)
-        else:
-            y = np.empty((batch_size, 20), dtype=float)
+            X = np.zeros((batch_size, *dims), dtype=bool)
+        y = np.zeros((batch_size, 20), dtype=float)
         # Extract frame from batch:
         for i, (pdb_code, chain_id, residue_id, _) in enumerate(data_point_batch):
             # Extract frame:
             residue_frame = np.asarray(dataset[pdb_code][chain_id][residue_id][()])
             X[i] = residue_frame
             # Extract residue label:
-            if predict_rotamers:
-                res_label = dataset[pdb_code][chain_id][residue_id].attrs["label"]
-                rot = dataset[pdb_code][chain_id][residue_id].attrs["rotamers"]
-                if (
-                    res_label in codec
-                    and rot != "-1"
-                    and rot.upper() != "NAN"
-                ):
-                    y[i] = codec[res_label][
-                        tuple(np.array(list(rot), dtype=int).tolist())
-                    ]
-                else:
-                    remove_idx.append(i)
-            else:
-                y[i] = dataset[pdb_code][chain_id][residue_id].attrs["encoded_residue"]
-    # Remove empty rotamers:
-    if predict_rotamers:
-        X = np.delete(X, remove_idx, axis=0)
-        y = np.delete(y, remove_idx, axis=0)
+            y[i] = dataset[pdb_code][chain_id][residue_id].attrs["encoded_residue"]
     return X, y
 
 
@@ -372,7 +354,7 @@ def load_dataset_and_predict(
         else:
             model_name = str(m)
         # Import Model:
-        frame_model = tf.keras.models.load_model(m)
+        frame_model = tf.keras.models.load_model(Path(m))
         # Load batch:
         for index in tqdm(
             range(start_batch, n_batches),
@@ -389,11 +371,15 @@ def load_dataset_and_predict(
             X_batch, y_true_batch = load_batch(
                 dataset_path,
                 current_batch_map,
-                predict_rotamers,
-                codec if predict_rotamers else None,
             )
             # Make Predictions
+            print('asd')
             y_pred_batch = frame_model.predict(X_batch)
+            print('asd1')
+            if predict_rotamers:
+                current_batch = np.argmax(y_pred_batch, axis=1)
+                y_pred_batch = np.array([codec[c] for c in current_batch])
+                del current_batch
             # Add predictions labels to dictionary:
             y_pred[i].extend(y_pred_batch)
             # Save current labels:
