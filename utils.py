@@ -230,9 +230,9 @@ def get_rotamer_codec() -> dict:
             res_rot_to_encoding[res] = rot_to_encoding
             all_rotamers = np.array(all_rotamers, dtype=str)
             for r, rota in enumerate(all_rotamers):
-                flat_categories.append(f"{a}_{''.join(rota)}")
-                rot_to_20res[r_count+r] = np.array([0]*20)
-                rot_to_20res[r_count+r][i] = 1
+                flat_categories.append(a)
+                rot_to_20res[r_count + r] = np.array([0] * 20)
+                rot_to_20res[r_count + r][i] = 1
             r_count += len(all_rotamers)
         # No rotamers available:
         else:
@@ -241,10 +241,10 @@ def get_rotamer_codec() -> dict:
             onehot_encoding[r_count] = 1
             rot_to_encoding = {(0,): onehot_encoding}
             res_rot_to_encoding[res] = rot_to_encoding
-            flat_categories.append(f"{a}_0")
-            r_count += n_rot
-            rot_to_20res[r_count] = np.array([0]*20)
+            flat_categories.append(a)
+            rot_to_20res[r_count] = np.array([0] * 20)
             rot_to_20res[r_count][i] = 1
+            r_count += n_rot
 
     return rot_to_20res, flat_categories
 
@@ -343,7 +343,9 @@ def load_dataset_and_predict(
             dataset_path, filter_pdb_list
         )
     if predict_rotamers:
-        codec, _ = get_rotamer_codec()
+        codec, flat_categories = get_rotamer_codec()
+    else:
+        codec, flat_categories = None, None
     # Calculate number of batches
     n_batches = ceil(len(flat_dataset_map) / batch_size)
     # For each model:
@@ -373,9 +375,7 @@ def load_dataset_and_predict(
                 current_batch_map,
             )
             # Make Predictions
-            print('asd')
             y_pred_batch = frame_model.predict(X_batch)
-            print('asd1')
             if predict_rotamers:
                 current_batch = np.argmax(y_pred_batch, axis=1)
                 y_pred_batch = np.array([codec[c] for c in current_batch])
@@ -403,7 +403,12 @@ def load_dataset_and_predict(
             pdb_to_real_sequence,
             pdb_to_consensus,
             pdb_to_consensus_prob,
-        ) = extract_sequence_from_pred_matrix(flat_dataset_map, prediction_matrix)
+        ) = extract_sequence_from_pred_matrix(
+            flat_dataset_map,
+            prediction_matrix,
+            codec,
+            flat_categories,
+        )
         save_dict_to_fasta(pdb_to_sequence, model_name)
         save_dict_to_fasta(pdb_to_real_sequence, "dataset")
         if pdb_to_consensus:
@@ -486,7 +491,10 @@ def save_dict_to_fasta(pdb_to_sequence: dict, model_name: str):
 
 
 def extract_sequence_from_pred_matrix(
-    flat_dataset_map: t.List[t.Tuple], prediction_matrix: np.ndarray
+    flat_dataset_map: t.List[t.Tuple],
+    prediction_matrix: np.ndarray,
+    codec: t.Optional[dict],
+    flat_categories: t.List[int],
 ) -> (dict, dict, dict, dict, dict):
     """
     Extract sequence from prediction matrix and create pdb_to_sequence and
@@ -517,8 +525,13 @@ def extract_sequence_from_pred_matrix(
     # Wether the dataset contains multiple states of NMR or not
     is_consensus = False
 
-    res_dic = list(standard_amino_acids.keys())
-    res_to_r_dic = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
+    if codec:
+        res_dic = flat_categories
+    else:
+        res_dic = list(standard_amino_acids.keys())
+    res_to_r_dic = dict(
+        zip(standard_amino_acids.values(), standard_amino_acids.keys())
+    )
     max_idx = np.argmax(prediction_matrix, axis=1)
 
     for i in range(len(flat_dataset_map)):

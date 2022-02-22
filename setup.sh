@@ -34,8 +34,8 @@ install_python_packages() {
   if [ $macOS = "false" ]; then
     conda install cudatoolkit cudnn cupti
   fi
-  conda install -q tensorflow=2.4.0
-  conda install -q  h5py=2.10.0
+  conda install -q tensorflow -y
+  conda install -q  h5py -y
 }
 
 set_python_path() {
