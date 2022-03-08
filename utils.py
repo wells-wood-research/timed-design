@@ -230,7 +230,7 @@ def get_rotamer_codec() -> dict:
             res_rot_to_encoding[res] = rot_to_encoding
             all_rotamers = np.array(all_rotamers, dtype=str)
             for r, rota in enumerate(all_rotamers):
-                flat_categories.append(a)
+                flat_categories.append(f"{res}_{''.join(rota)}")
                 rot_to_20res[r_count + r] = np.array([0] * 20)
                 rot_to_20res[r_count + r][i] = 1
             r_count += len(all_rotamers)
@@ -241,7 +241,7 @@ def get_rotamer_codec() -> dict:
             onehot_encoding[r_count] = 1
             rot_to_encoding = {(0,): onehot_encoding}
             res_rot_to_encoding[res] = rot_to_encoding
-            flat_categories.append(a)
+            flat_categories.append(f"{res}_0")
             rot_to_20res[r_count] = np.array([0] * 20)
             rot_to_20res[r_count][i] = 1
             r_count += n_rot
@@ -377,6 +377,9 @@ def load_dataset_and_predict(
             # Make Predictions
             y_pred_batch = frame_model.predict(X_batch)
             if predict_rotamers:
+                # Output model predictions:
+                with open(f"{model_name}_rot.csv", "a") as f:
+                    np.savetxt(f, y_pred_batch, delimiter=",")
                 current_batch = np.argmax(y_pred_batch, axis=1)
                 y_pred_batch = np.array([codec[c] for c in current_batch])
                 del current_batch
