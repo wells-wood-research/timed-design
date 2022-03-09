@@ -9,7 +9,14 @@ from pathlib import Path
 
 import ampal
 import numpy as np
-from sklearn.metrics import accuracy_score, roc_auc_score, classification_report, top_k_accuracy_score, precision_score, recall_score
+from sklearn.metrics import (
+    accuracy_score,
+    roc_auc_score,
+    classification_report,
+    top_k_accuracy_score,
+    precision_score,
+    recall_score,
+)
 from ampal.amino_acids import standard_amino_acids
 from aposteriori.data_prep.create_frame_data_set import _fetch_pdb
 from utils import get_rotamer_codec, extract_sequence_from_pred_matrix
@@ -19,9 +26,13 @@ def calulate_metrics(pdb_to_probability, pdb_to_rotamer, rot_categories):
     y_pred = []
     y_true = []
     # Extract predictions:
-    for pdb in pdb_to_rotamer.keys():
-        y_pred.append(pdb_to_probability[pdb])
-        y_true.append(pdb_to_rotamer[pdb])
+    for pdb in pdb_to_probability.keys():
+        if pdb in pdb_to_rotamer:
+            y_pred += pdb_to_probability[pdb]
+            y_true += pdb_to_rotamer[pdb]
+        else:
+            print(f"Error with pdb code {pdb}")
+
     y_pred = np.array(y_pred).reshape(-1, 338)
     y_true = np.array(y_true).flatten()
     y_pred = y_pred[~np.isnan(y_true)]
@@ -31,31 +42,74 @@ def calulate_metrics(pdb_to_probability, pdb_to_rotamer, rot_categories):
         idx_res = y_pred.sum(axis=1) != 1
         old_residuals = y_pred[idx_res].sum(axis=1)
         # Calculate residual and then create idx_res, 338 with the residual / 338
-        residual = np.ones((338, idx_res.sum())) * (1-y_pred[idx_res].sum(axis=1)) / 338
+        residual = (
+            np.ones((338, idx_res.sum())) * (1 - y_pred[idx_res].sum(axis=1)) / 338
+        )
         y_pred[idx_res] = np.add(y_pred[idx_res], residual.T)
-        assert np.allclose(1, y_pred.sum(axis=1)), f"Probabilities at idx {idx_res} do not add up to 1: {old_residuals} and after adjustment got {y_pred[idx_res]}"
+        assert np.allclose(
+            1, y_pred.sum(axis=1)
+        ), f"Probabilities at idx {idx_res} do not add up to 1: {old_residuals} and after adjustment got {y_pred[idx_res]}"
     y_argmax = np.argmax(y_pred, axis=1)
     # Calculate metrics:
-    auc_ovo = roc_auc_score(y_true, y_pred, multi_class="ovo", labels=list(range(len(rot_categories))), average='macro')
+    auc_ovo = roc_auc_score(
+        y_true,
+        y_pred,
+        multi_class="ovo",
+        labels=list(range(len(rot_categories))),
+        average="macro",
+    )
     try:
-        auc_ovr = roc_auc_score(y_true, y_pred, multi_class="ovr", labels=list(range(len(rot_categories))), average='macro')
+        auc_ovr = roc_auc_score(
+            y_true,
+            y_pred,
+            multi_class="ovr",
+            labels=list(range(len(rot_categories))),
+            average="macro",
+        )
     except ValueError:
         auc_ovr = np.nan
-    report = classification_report(y_true, y_argmax, labels=list(range(len(rot_categories))))
+    report = classification_report(
+        y_true,
+        y_argmax,
+        labels=list(range(len(rot_categories))),
+        target_names=rot_categories,
+    )
     accuracy = accuracy_score(y_true, y_argmax)
-    accuracy_2 = top_k_accuracy_score(y_true, y_pred, k=2, labels=list(range(len(rot_categories))))
-    accuracy_3 = top_k_accuracy_score(y_true, y_pred, k=3, labels=list(range(len(rot_categories))))
-    accuracy_4 = top_k_accuracy_score(y_true, y_pred, k=4, labels=list(range(len(rot_categories))))
-    accuracy_5 = top_k_accuracy_score(y_true, y_pred, k=5, labels=list(range(len(rot_categories))))
-    precision = precision_score(y_true, y_argmax, average="macro", labels=list(range(len(rot_categories))), zero_division=0)
-    recall = recall_score(y_true, y_argmax, average="macro", labels=list(range(len(rot_categories))), zero_division=0)
+    accuracy_2 = top_k_accuracy_score(
+        y_true, y_pred, k=2, labels=list(range(len(rot_categories)))
+    )
+    accuracy_3 = top_k_accuracy_score(
+        y_true, y_pred, k=3, labels=list(range(len(rot_categories)))
+    )
+    accuracy_4 = top_k_accuracy_score(
+        y_true, y_pred, k=4, labels=list(range(len(rot_categories)))
+    )
+    accuracy_5 = top_k_accuracy_score(
+        y_true, y_pred, k=5, labels=list(range(len(rot_categories)))
+    )
+    precision = precision_score(
+        y_true,
+        y_argmax,
+        average="macro",
+        labels=list(range(len(rot_categories))),
+        zero_division=0,
+    )
+    recall = recall_score(
+        y_true,
+        y_argmax,
+        average="macro",
+        labels=list(range(len(rot_categories))),
+        zero_division=0,
+    )
     print("Metrics AUC_OVR")
     print(auc_ovr)
     print("Metrics AUC_OVO")
     print(auc_ovo)
     print("Metrics Report")
     print(report)
-    print(f"report: {report}, accuracy: {accuracy}, accuracy_2: {accuracy_2}, accuracy_3: {accuracy_3}, accuracy_4: {accuracy_4}, accuracy_5: {accuracy_5}, precision: {precision}, recall: {recall}" )
+    print(
+        f"Accuracy: {accuracy}, accuracy_2: {accuracy_2}, accuracy_3: {accuracy_3}, accuracy_4: {accuracy_4}, accuracy_5: {accuracy_5}, precision: {precision}, recall: {recall}"
+    )
     # Calculate bias:
     count_labels = Counter(y_true)
     count_pred = Counter(y_argmax)
@@ -93,7 +147,7 @@ def extract_rotamer_encoding(pdb_code, monomer):
 
 def tag_pdb_with_rot(pdb_code, pdb_path):
     # pdb_path = pdb_path / pdb_code[1:3] / (pdb_code + ".pdb1.gz")
-    out_dir =  pdb_path / pdb_code[1:3]
+    out_dir = pdb_path / pdb_code[1:3]
     pdb_path = out_dir / (pdb_code + ".pdb1.gz")
     if not pdb_path.exists():
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -159,8 +213,7 @@ def main(args):
     ) = extract_sequence_from_pred_matrix(
         datasetmap, prediction_matrix, codec=True, flat_categories=res_categories
     )
-    calulate_metrics(pdb_to_probability, curr_res_dict, flat_categories)
-    raise ValueError
+    calulate_metrics(pdb_to_probability, results_dict, flat_categories)
 
 
 if __name__ == "__main__":
