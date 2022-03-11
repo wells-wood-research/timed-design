@@ -1,21 +1,20 @@
-import copy
-import h5py
 import sys
 import typing as t
 import warnings
-from math import ceil
 from itertools import product
+from math import ceil
 from pathlib import Path
 
+import h5py
 import numpy as np
 import tensorflow as tf
-from ampal.amino_acids import standard_amino_acids, side_chain_dihedrals
+from ampal.amino_acids import side_chain_dihedrals, standard_amino_acids
 from numpy import genfromtxt
+from tensorflow.keras.metrics import top_k_categorical_accuracy
 from tqdm import tqdm
 
+from aposteriori.config import MAKE_FRAME_DATASET_VER, UNCOMMON_RESIDUE_DICT
 from aposteriori.data_prep.create_frame_data_set import DatasetMetadata
-from aposteriori.config import UNCOMMON_RESIDUE_DICT, MAKE_FRAME_DATASET_VER
-from tensorflow.keras.metrics import top_k_categorical_accuracy
 
 
 def top_3_cat_acc(y_true, y_pred):

@@ -1,7 +1,6 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 import seaborn as sns
-
 from ampal.amino_acids import standard_amino_acids
 
 
