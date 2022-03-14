@@ -19,9 +19,8 @@ from utils import extract_sequence_from_pred_matrix, get_rotamer_codec
 
 
 def plot_cm(cm, y_labels, x_labels, title):
-    max_len = max(len(x_labels), len(y_labels))
     # Plot Confusion Matrix:
-    fig = plt.figure(figsize=(len(x_labels)*0.5, len(y_labels)*0.5))
+    fig = plt.figure(figsize=(max(len(x_labels)*0.5, 5), max(len(y_labels)*0.5, 5)))
     # fig = plt.figure()
     plt.imshow(cm, interpolation='nearest', aspect='auto')
     plt.xlabel("Predicted Residue")
@@ -32,9 +31,9 @@ def plot_cm(cm, y_labels, x_labels, title):
     # Plot Color Bar:
     norm = colors.Normalize()
     sm = plt.cm.ScalarMappable(cmap="viridis", norm=norm)
-    fig.colorbar(sm).set_label("Confusion Level (Range 0 - 1)")
+    # fig.colorbar(sm).set_label("Confusion Level (Range 0 - 1)")
     fig.tight_layout()
-    fig.savefig(f"{title.replace(' ', '_')}.svg")
+    fig.savefig(f"{title.replace(' ', '_')}.png")
     # Save Confusion:
     plt.close()
 
@@ -60,17 +59,19 @@ def create_rot_cm(cm, rot_categories, mode: str):
         curr_rot_cat = rot_categories[rot_idx]
         # Select from CM
         rot_cm = cm[rot_idx, :]  # (n_rot, 338)
+        rot_cm = rot_cm / np.sum(rot_cm)  # (n_rot, 338)
         small_cm = cm[rot_idx][:, rot_idx]  # (n_rot, n_rot)
+        small_cm = small_cm / np.sum(rot_cm) # (n_rot, n_rot)
         # Plot CM
         plot_cm(rot_cm, y_labels=curr_rot_cat, x_labels=rot_categories, title=f"{mode} {res} vs all 338 rot")
         if len(small_cm) > 1: # Avoids bug with glycine and alanine
-
             plot_cm(small_cm, y_labels=curr_rot_cat, x_labels=curr_rot_cat, title=f"{mode} {res} vs {res} rot")
         rot_res_cm = np.zeros((sum(rot_idx), 20)) # (n_rot, 20) 1 extra column added for sum
         for i, r in enumerate(standard_amino_acids.values()):
             curr_rot_idx = res_categories == r
             curr_sum = np.sum(rot_cm[:, curr_rot_idx], axis=1) # (n_rot, 1)
             rot_res_cm[:, i] = curr_sum
+        rot_res_cm = rot_res_cm / np.sum(rot_res_cm)
         plot_cm(rot_res_cm, y_labels=curr_rot_cat, x_labels=list(standard_amino_acids.values()), title=f"{mode} {res} vs 20 res")
 
     return
@@ -104,10 +105,6 @@ def calulate_metrics(pdb_to_probability, pdb_to_rotamer, rot_categories):
             1, y_pred.sum(axis=1)
         ), f"Probabilities at idx {idx_res} do not add up to 1: {old_residuals} and after adjustment got {y_pred[idx_res]}"
     y_argmax = np.argmax(y_pred, axis=1)
-    # TODO REMOVE
-    # y_argmax = y_argmax[:1000]
-    # y_pred = y_pred[:1000]
-    # y_true = y_true[:1000]
     # Calculate metrics:
     auc_ovo = roc_auc_score(
         y_true,

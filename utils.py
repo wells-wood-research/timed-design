@@ -408,7 +408,6 @@ def load_dataset_and_predict(
         ) = extract_sequence_from_pred_matrix(
             flat_dataset_map,
             prediction_matrix,
-            codec,
             flat_categories,
         )
         save_dict_to_fasta(pdb_to_sequence, model_name)
@@ -495,8 +494,7 @@ def save_dict_to_fasta(pdb_to_sequence: dict, model_name: str):
 def extract_sequence_from_pred_matrix(
     flat_dataset_map: t.List[t.Tuple],
     prediction_matrix: np.ndarray,
-    codec: t.Optional[dict],
-    flat_categories: t.List[int],
+    flat_categories: t.List[str],
 ) -> (dict, dict, dict, dict, dict):
     """
     Extract sequence from prediction matrix and create pdb_to_sequence and
@@ -526,14 +524,14 @@ def extract_sequence_from_pred_matrix(
     pdb_to_consensus_prob = {}
     # Wether the dataset contains multiple states of NMR or not
     is_consensus = False
-
-    if codec:
-        res_dic = flat_categories
-    else:
-        res_dic = list(standard_amino_acids.keys())
     res_to_r_dic = dict(
         zip(standard_amino_acids.values(), standard_amino_acids.keys())
     )
+    if flat_categories:
+        res_dic = [res_to_r_dic[res.split("_")[0]] for res in flat_categories]
+    else:
+        res_dic = list(standard_amino_acids.keys())
+
     max_idx = np.argmax(prediction_matrix, axis=1)
 
     for i in range(len(flat_dataset_map)):
