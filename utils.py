@@ -408,19 +408,16 @@ def load_dataset_and_predict(
         ) = extract_sequence_from_pred_matrix(
             flat_dataset_map,
             prediction_matrix,
-            flat_categories,
+            flat_categories if predict_rotamers else None,
         )
-        save_dict_to_fasta(pdb_to_sequence, model_name, flat_categories=flat_categories)
+        save_dict_to_fasta(pdb_to_sequence, model_name)
         save_dict_to_fasta(pdb_to_real_sequence, "dataset")
         if pdb_to_consensus:
             save_dict_to_fasta(
                 pdb_to_consensus,
                 model_name + "_consensus",
-                flat_categories=flat_categories,
             )
-            save_consensus_probs(
-                pdb_to_consensus_prob, model_name, flat_categories=flat_categories
-            )
+            save_consensus_probs(pdb_to_consensus_prob, model_name)
 
     return (
         flat_dataset_map,
