@@ -406,9 +406,7 @@ def load_dataset_and_predict(
             pdb_to_consensus,
             pdb_to_consensus_prob,
         ) = extract_sequence_from_pred_matrix(
-            flat_dataset_map,
-            prediction_matrix,
-            flat_categories if predict_rotamers else None,
+            flat_dataset_map, prediction_matrix, rotamers_categories=None
         )
         save_dict_to_fasta(pdb_to_sequence, model_name)
         save_dict_to_fasta(pdb_to_real_sequence, "dataset")
@@ -497,7 +495,7 @@ def save_dict_to_fasta(pdb_to_sequence: dict, model_name: str):
 def extract_sequence_from_pred_matrix(
     flat_dataset_map: t.List[t.Tuple],
     prediction_matrix: np.ndarray,
-    flat_categories: t.List[str],
+    rotamers_categories: t.List[str],
 ) -> (dict, dict, dict, dict, dict):
     """
     Extract sequence from prediction matrix and create pdb_to_sequence and
@@ -528,8 +526,8 @@ def extract_sequence_from_pred_matrix(
     # Wether the dataset contains multiple states of NMR or not
     is_consensus = False
     res_to_r_dic = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
-    if flat_categories:
-        res_dic = [res_to_r_dic[res.split("_")[0]] for res in flat_categories]
+    if rotamers_categories:
+        res_dic = [res_to_r_dic[res.split("_")[0]] for res in rotamers_categories]
     else:
         res_dic = list(standard_amino_acids.keys())
 

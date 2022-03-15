@@ -264,7 +264,7 @@ def main(args):
     _, flat_categories = get_rotamer_codec()
     res_to_r = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
     # Create flat categories of 1 letter amino acid for each of the 338 rotamers
-    res_categories = [res_to_r[res.split("_")[0]] for res in flat_categories]
+    rotamers_categories = [res_to_r[res.split("_")[0]] for res in flat_categories]
     (
         pdb_to_sequence,
         pdb_to_probability,
@@ -272,7 +272,7 @@ def main(args):
         pdb_to_consensus,
         pdb_to_consensus_prob,
     ) = extract_sequence_from_pred_matrix(
-        datasetmap, prediction_matrix, codec=True, flat_categories=res_categories
+        datasetmap, prediction_matrix, rotamers_categories=rotamers_categories
     )
     calulate_metrics(pdb_to_probability, results_dict, flat_categories)
 
