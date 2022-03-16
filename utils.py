@@ -1,20 +1,20 @@
-import copy
-import h5py
 import sys
 import typing as t
 import warnings
+from itertools import product
 from math import ceil
 from pathlib import Path
 
+import h5py
 import numpy as np
 import tensorflow as tf
-from ampal.amino_acids import standard_amino_acids
+from ampal.amino_acids import side_chain_dihedrals, standard_amino_acids
 from numpy import genfromtxt
+from tensorflow.keras.metrics import top_k_categorical_accuracy
 from tqdm import tqdm
 
+from aposteriori.config import MAKE_FRAME_DATASET_VER, UNCOMMON_RESIDUE_DICT
 from aposteriori.data_prep.create_frame_data_set import DatasetMetadata
-from aposteriori.config import UNCOMMON_RESIDUE_DICT, MAKE_FRAME_DATASET_VER
-from tensorflow.keras.metrics import top_k_categorical_accuracy
 
 
 def top_3_cat_acc(y_true, y_pred):
@@ -204,8 +204,53 @@ def create_flat_dataset_map(
     return flat_dataset_map, training_set_pdbs
 
 
+def get_rotamer_codec() -> dict:
+    """
+    Creates a codec for tagging residues rotamers.
+    Returns
+    -------
+    res_rot_to_encoding: dict
+        Rotamer residues encoding of the format {1_letter_res : {rotamer_tuple: encoding}}
+    """
+    res_rot_to_encoding = {}
+    flat_categories = []
+    rot_to_20res = {}
+    all_count = 338
+    r_count = 0  # Number of rotamers processed so far
+    for i, (a, res) in enumerate(standard_amino_acids.items()):
+        if res in side_chain_dihedrals:
+            n_rot = len(side_chain_dihedrals[res])
+            all_rotamers = list(product([1, 2, 3], repeat=n_rot))
+            encoding = np.arange(r_count, r_count + len(all_rotamers))
+            onehot_encoding = np.zeros((len(all_rotamers), all_count))
+            # Encodings are sorted so we can do encoding encoding
+            onehot_encoding[np.arange(0, len(encoding)), encoding] = 1
+            rot_to_encoding = dict(zip(all_rotamers, onehot_encoding))
+            res_rot_to_encoding[res] = rot_to_encoding
+            all_rotamers = np.array(all_rotamers, dtype=str)
+            for r, rota in enumerate(all_rotamers):
+                flat_categories.append(f"{res}_{''.join(rota)}")
+                rot_to_20res[r_count + r] = np.array([0] * 20)
+                rot_to_20res[r_count + r][i] = 1
+            r_count += len(all_rotamers)
+        # No rotamers available:
+        else:
+            n_rot = 1
+            onehot_encoding = np.array([0] * all_count)
+            onehot_encoding[r_count] = 1
+            rot_to_encoding = {(0,): onehot_encoding}
+            res_rot_to_encoding[res] = rot_to_encoding
+            flat_categories.append(f"{res}_0")
+            rot_to_20res[r_count] = np.array([0] * 20)
+            rot_to_20res[r_count][i] = 1
+            r_count += n_rot
+
+    return rot_to_20res, flat_categories
+
+
 def load_batch(
-    dataset_path: Path, data_point_batch: t.List[t.Tuple]
+    dataset_path: Path,
+    data_point_batch: t.List[t.Tuple],
 ) -> (np.ndarray, np.ndarray):
     """
     Load batch from a dataset map.
@@ -223,20 +268,22 @@ def load_batch(
         5D frames with (batch_size, n, n, n, n_encoding) shape
     y: np.ndarray
         Array of shape (batch_size, 20) containing labels of frames
+        or (batch_size, 338) if predict_rotamers=True
 
     """
     # Calcualte catch size
     batch_size = len(data_point_batch)
+    remove_idx = []
     # Open hdf5:
     with h5py.File(str(dataset_path), "r") as dataset:
         dims = dataset.attrs["frame_dims"]
         voxels_as_gaussian = dataset.attrs["voxels_as_gaussian"]
         # Initialize X and y:
         if voxels_as_gaussian:
-            X = np.empty((batch_size, *dims), dtype=float)
+            X = np.zeros((batch_size, *dims), dtype=float)
         else:
-            X = np.empty((batch_size, *dims), dtype=bool)
-        y = np.empty((batch_size, 20), dtype=float)
+            X = np.zeros((batch_size, *dims), dtype=bool)
+        y = np.zeros((batch_size, 20), dtype=float)
         # Extract frame from batch:
         for i, (pdb_code, chain_id, residue_id, _) in enumerate(data_point_batch):
             # Extract frame:
@@ -244,7 +291,6 @@ def load_batch(
             X[i] = residue_frame
             # Extract residue label:
             y[i] = dataset[pdb_code][chain_id][residue_id].attrs["encoded_residue"]
-
     return X, y
 
 
@@ -253,8 +299,9 @@ def load_dataset_and_predict(
     dataset_path: Path,
     batch_size: int = 20,
     start_batch: int = 0,
-    dataset_map_path: Path = "dataset",
+    dataset_map_path: Path = "datasetmap.txt",
     blacklist: Path = None,
+    predict_rotamers: bool = False,
 ) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
     """
     Load discretized frame dataset (should be the same format as the trained models),
@@ -280,8 +327,8 @@ def load_dataset_and_predict(
     flat_dataset_map: t.List[t.Tuple]
         List of tuples with the order
         [... (pdb_code, chain_id, residue_id,  residue_label, encoded_residue) ...]
-    # TODO Add fix
     """
+    print(f"Running model on {'338 rotamers' if predict_rotamers else '20 residues'}")
     # Get list of banned pdbs from the benchmark:
     if blacklist:
         filter_pdb_list = get_pdb_keys_to_filter(blacklist)
@@ -295,7 +342,10 @@ def load_dataset_and_predict(
         flat_dataset_map, training_set_pdbs = create_flat_dataset_map(
             dataset_path, filter_pdb_list
         )
-
+    if predict_rotamers:
+        codec, flat_categories = get_rotamer_codec()
+    else:
+        codec, flat_categories = None, None
     # Calculate number of batches
     n_batches = ceil(len(flat_dataset_map) / batch_size)
     # For each model:
@@ -306,7 +356,7 @@ def load_dataset_and_predict(
         else:
             model_name = str(m)
         # Import Model:
-        frame_model = tf.keras.models.load_model(m)
+        frame_model = tf.keras.models.load_model(Path(m))
         # Load batch:
         for index in tqdm(
             range(start_batch, n_batches),
@@ -320,9 +370,19 @@ def load_dataset_and_predict(
             current_batch_map = flat_dataset_map[
                 index * batch_size : (index + 1) * batch_size
             ]
-            X_batch, y_true_batch = load_batch(dataset_path, current_batch_map)
+            X_batch, y_true_batch = load_batch(
+                dataset_path,
+                current_batch_map,
+            )
             # Make Predictions
             y_pred_batch = frame_model.predict(X_batch)
+            if predict_rotamers:
+                # Output model predictions:
+                with open(f"{model_name}_rot.csv", "a") as f:
+                    np.savetxt(f, y_pred_batch, delimiter=",")
+                current_batch = np.argmax(y_pred_batch, axis=1)
+                y_pred_batch = np.array([codec[c] for c in current_batch])
+                del current_batch
             # Add predictions labels to dictionary:
             y_pred[i].extend(y_pred_batch)
             # Save current labels:
@@ -346,11 +406,16 @@ def load_dataset_and_predict(
             pdb_to_real_sequence,
             pdb_to_consensus,
             pdb_to_consensus_prob,
-        ) = extract_sequence_from_pred_matrix(flat_dataset_map, prediction_matrix)
+        ) = extract_sequence_from_pred_matrix(
+            flat_dataset_map, prediction_matrix, rotamers_categories=None
+        )
         save_dict_to_fasta(pdb_to_sequence, model_name)
         save_dict_to_fasta(pdb_to_real_sequence, "dataset")
         if pdb_to_consensus:
-            save_dict_to_fasta(pdb_to_consensus, model_name + "_consensus")
+            save_dict_to_fasta(
+                pdb_to_consensus,
+                model_name + "_consensus",
+            )
             save_consensus_probs(pdb_to_consensus_prob, model_name)
 
     return (
@@ -361,6 +426,7 @@ def load_dataset_and_predict(
         pdb_to_consensus,
         pdb_to_consensus_prob,
     )
+
 
 def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str):
     """
@@ -428,7 +494,9 @@ def save_dict_to_fasta(pdb_to_sequence: dict, model_name: str):
 
 
 def extract_sequence_from_pred_matrix(
-    flat_dataset_map: t.List[t.Tuple], prediction_matrix: np.ndarray
+    flat_dataset_map: t.List[t.Tuple],
+    prediction_matrix: np.ndarray,
+    rotamers_categories: t.List[str],
 ) -> (dict, dict, dict, dict, dict):
     """
     Extract sequence from prediction matrix and create pdb_to_sequence and
@@ -458,9 +526,12 @@ def extract_sequence_from_pred_matrix(
     pdb_to_consensus_prob = {}
     # Wether the dataset contains multiple states of NMR or not
     is_consensus = False
-
-    res_dic = list(standard_amino_acids.keys())
     res_to_r_dic = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
+    if rotamers_categories:
+        res_dic = [res_to_r_dic[res.split("_")[0]] for res in rotamers_categories]
+    else:
+        res_dic = list(standard_amino_acids.keys())
+
     max_idx = np.argmax(prediction_matrix, axis=1)
 
     for i in range(len(flat_dataset_map)):

@@ -5,12 +5,21 @@
 1. Setting up conda:
 
 ```
-conda create --name timed_predict python=3.7
+conda create --name timed_predict python=3.8
 ```
 
 ```
 conda activate timed_predict
 ```
+
+### Easy Install:
+
+```
+sh setup.sh
+```
+
+### Manual Install:
+
 
 2. Install poetry:
 
@@ -84,6 +93,13 @@ make-frame-dataset YOUR_PDB_FOLDER  -e YOUR_PDB_EXTENSION --voxels-per-side 21 -
 ```
 
 For more info about other options, please see https://github.com/wells-wood-research/aposteriori/
+
+for a sample dataset use:
+
+```shell
+poetry run make-frame-dataset aposteriori/tests/testing_files/pdb_files/ -e .pdb --name data --voxels-per-side 21 --frame-edge-length 21 -p 8  -vrz -cb False -ae CNOCBCA -g True 
+```
+
 
 3. Download your model of interest from:
 
