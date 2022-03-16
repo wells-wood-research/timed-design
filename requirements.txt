@@ -1,7 +1,7 @@
 h5py==3.6.0
 hypothesis==6.36.0
 requests==2.27.1
-tensorflow==2.7.0
+tensorflow==2.8.0
 tqdm==4.62.3
 Cython==0.29.26
 click==8.0.3
