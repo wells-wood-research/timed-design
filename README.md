@@ -118,6 +118,13 @@ eg.
 python3 predict.py --path_to_dataset dataset.hdf5 --path_to_model timed_2.h5
 ```
 
+### Predicting Rotamers:
 
+In order to use a rotamer model, use the flag `--predict_rotamers True`:
+
+
+```
+python3 predict.py --path_to_dataset dataset.hdf5 --path_to_model timed_rot.h5 --predict_rotamers True
+```
 
 
