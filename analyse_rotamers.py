@@ -1,5 +1,6 @@
 import argparse
 import gzip
+import typing as t
 from collections import Counter
 from itertools import repeat
 from multiprocessing import Pool
@@ -10,19 +11,47 @@ import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
-from sklearn.metrics import (accuracy_score, classification_report,
-                             confusion_matrix, precision_score, recall_score,
-                             roc_auc_score, top_k_accuracy_score)
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    confusion_matrix,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+    top_k_accuracy_score,
+)
 
 from aposteriori.data_prep.create_frame_data_set import _fetch_pdb
 from utils import extract_sequence_from_pred_matrix, get_rotamer_codec
 
 
-def plot_cm(cm, y_labels, x_labels, title):
+def plot_cm(
+    cm: np.ndarray,
+    y_labels: t.List[str],
+    x_labels: t.List[str],
+    title: str,
+    display_colorbar: bool = False,
+):
+    """
+    Plot confusion matrix (can be any shape) to a file
+
+    Parameters
+    ----------
+    cm: np.ndarray
+        Confusion matrix of shape (len(y_labels), len(x_labels))
+    y_labels: t.List[str]
+        List of string of y labels
+    x_labels: t.List[str]
+        List of string of x labels
+    title: str
+        Title string for the graph (will be used as filename without spaces)
+    display_colorbar:
+        Whether to display the colorbar on the right hand side of the graph
+    """
     # Plot Confusion Matrix:
-    fig = plt.figure(figsize=(max(len(x_labels)*0.5, 5), max(len(y_labels)*0.5, 5)))
+    fig = plt.figure(figsize=(max(len(x_labels) * 0.5, 5), max(len(y_labels) * 0.5, 5)))
     # fig = plt.figure()
-    plt.imshow(cm, interpolation='nearest', aspect='auto')
+    plt.imshow(cm, interpolation="nearest", aspect="auto")
     plt.xlabel("Predicted Residue")
     plt.xticks(range(len(x_labels)), x_labels, rotation=90)
     plt.ylabel("True Residue")
@@ -31,25 +60,25 @@ def plot_cm(cm, y_labels, x_labels, title):
     # Plot Color Bar:
     norm = colors.Normalize()
     sm = plt.cm.ScalarMappable(cmap="viridis", norm=norm)
-    # fig.colorbar(sm).set_label("Confusion Level (Range 0 - 1)")
+    if display_colorbar:
+        fig.colorbar(sm).set_label("Confusion Level (Range 0 - 1)")
     fig.tight_layout()
     fig.savefig(f"{title.replace(' ', '_')}.png")
     # Save Confusion:
     plt.close()
 
 
-def create_rot_cm(cm, rot_categories, mode: str):
+def create_rot_cm(cm: np.ndarray, rot_categories: t.List[str], mode: str):
     """
 
     Parameters
     ----------
     cm: np.ndarray
         (338, 338) Ci,j is equal to the number of observations known to be in group i and predicted to be in group j.
-    rot_categories
-
-    Returns
-    -------
-
+    rot_categories: t.List[str]
+        List of strings of rotamer categories eg [ALA_0, CYS_ ...] (338,)
+    mode: str
+        Additional text preceding file name (eg. weighted_{filename}.svg)
     """
     rot_categories = np.asarray(rot_categories)
     # Get repeated residue labels for each residue (338,)
@@ -61,23 +90,58 @@ def create_rot_cm(cm, rot_categories, mode: str):
         rot_cm = cm[rot_idx, :]  # (n_rot, 338)
         rot_cm = rot_cm / np.sum(rot_cm)  # (n_rot, 338)
         small_cm = cm[rot_idx][:, rot_idx]  # (n_rot, n_rot)
-        small_cm = small_cm / np.sum(rot_cm) # (n_rot, n_rot)
+        small_cm = small_cm / np.sum(rot_cm)  # (n_rot, n_rot)
         # Plot CM
-        plot_cm(rot_cm, y_labels=curr_rot_cat, x_labels=rot_categories, title=f"{mode} {res} vs all 338 rot")
-        if len(small_cm) > 1: # Avoids bug with glycine and alanine
-            plot_cm(small_cm, y_labels=curr_rot_cat, x_labels=curr_rot_cat, title=f"{mode} {res} vs {res} rot")
-        rot_res_cm = np.zeros((sum(rot_idx), 20)) # (n_rot, 20) 1 extra column added for sum
+        plot_cm(
+            rot_cm,
+            y_labels=curr_rot_cat,
+            x_labels=rot_categories,
+            title=f"{mode} {res} vs all 338 rot",
+        )
+        if len(small_cm) > 1:  # Avoids bug with glycine and alanine
+            plot_cm(
+                small_cm,
+                y_labels=curr_rot_cat,
+                x_labels=curr_rot_cat,
+                title=f"{mode} {res} vs {res} rot",
+            )
+        rot_res_cm = np.zeros(
+            (sum(rot_idx), 20)
+        )  # (n_rot, 20) 1 extra column added for sum
         for i, r in enumerate(standard_amino_acids.values()):
             curr_rot_idx = res_categories == r
-            curr_sum = np.sum(rot_cm[:, curr_rot_idx], axis=1) # (n_rot, 1)
+            curr_sum = np.sum(rot_cm[:, curr_rot_idx], axis=1)  # (n_rot, 1)
             rot_res_cm[:, i] = curr_sum
         rot_res_cm = rot_res_cm / np.sum(rot_res_cm)
-        plot_cm(rot_res_cm, y_labels=curr_rot_cat, x_labels=list(standard_amino_acids.values()), title=f"{mode} {res} vs 20 res")
+        plot_cm(
+            rot_res_cm,
+            y_labels=curr_rot_cat,
+            x_labels=list(standard_amino_acids.values()),
+            title=f"{mode} {res} vs 20 res",
+        )
 
-    return
 
+def calulate_metrics(
+    pdb_to_probability: dict, pdb_to_rotamer: dict, rot_categories: t.List[str]
+):
+    """
+    Calculates useful metrics for rotamer performance analysis:
+        - ROC AUC score (OVO)
+        - Classification report (https://scikit-learn.org/0.15/modules/generated/sklearn.metrics.classification_report.html#sklearn.metrics.classification_report)
+        - Accuracy (top 1, 2, 3, 4, 5 accuracy)
+        - Macro Precision and Recall
+        - Prediction bias (https://developers.google.com/machine-learning/crash-course/classification/prediction-bias)
+        - Weighted / Unweighted confusion matrix
 
-def calulate_metrics(pdb_to_probability, pdb_to_rotamer, rot_categories):
+    Parameters
+    ----------
+    pdb_to_probability: dict
+        Dictionary {pdb_code: probability}
+    pdb_to_rotamer: dict
+        Dictionary {pdb_code: rotamer_list}
+    rot_categories: t.List[str]
+        List of strings of rotamer categories eg [ALA_0, CYS_ ...] (338,)
+    """
     y_pred = []
     y_true = []
     # Extract predictions:
@@ -183,14 +247,37 @@ def calulate_metrics(pdb_to_probability, pdb_to_rotamer, rot_categories):
     print(bias)
     weights = np.array([count_labels[r] for r in range(338)])
     weights = weights / np.sum(weights)
-    unweighted_cm = confusion_matrix(y_true, y_argmax, normalize='all', labels=list(range(338)))
+    unweighted_cm = confusion_matrix(
+        y_true, y_argmax, normalize="all", labels=list(range(338))
+    )
     create_rot_cm(unweighted_cm, rot_categories, mode="unweighted")
     sample_weights = [weights[int(y)] for y in y_true]
-    weighted_cm = confusion_matrix(y_true, y_argmax, normalize='all', sample_weight=sample_weights, labels=list(range(338)))
+    weighted_cm = confusion_matrix(
+        y_true,
+        y_argmax,
+        normalize="all",
+        sample_weight=sample_weights,
+        labels=list(range(338)),
+    )
     create_rot_cm(weighted_cm, rot_categories, mode="weighted")
 
 
-def extract_rotamer_encoding(pdb_code, monomer):
+def extract_rotamer_encoding(pdb_code: str, monomer: ampal.Assembly) -> dict:
+    """
+    Extracts rotamer encoding from PDB structure.
+
+    Parameters
+    ----------
+    pdb_code: str
+        pdb code of the structure of interest
+    monomer: ampal.Assembly
+        Assembly of the pdb structure
+
+    Returns
+    -------
+    dictionary: dict
+        {pdb_code_monomer.id: all_rot}
+    """
     _, flat_categories = get_rotamer_codec()
     res_rot_to_encoding = dict(zip(flat_categories, range(len(flat_categories))))
     all_rot = []
@@ -207,8 +294,22 @@ def extract_rotamer_encoding(pdb_code, monomer):
     return {f"{pdb_code}{monomer.id}": all_rot}
 
 
-def tag_pdb_with_rot(pdb_code, pdb_path):
-    # pdb_path = pdb_path / pdb_code[1:3] / (pdb_code + ".pdb1.gz")
+def tag_pdb_with_rot(pdb_code: str, pdb_path: Path) -> dict:
+    """
+    Tag pdb file with rotamer (note: the pdb file is not modified)
+
+    Parameters
+    ----------
+    pdb_code: str
+        PDB code for structure of interest
+    pdb_path: Path
+        Path to structure of interest
+
+    Returns
+    -------
+    result_dict: dict
+        {pdb_code_monomer.id: all_rot}
+    """
     out_dir = pdb_path / pdb_code[1:3]
     pdb_path = out_dir / (pdb_code + ".pdb1.gz")
     if not pdb_path.exists():
@@ -246,9 +347,12 @@ def main(args):
         args.path_to_datasetmap.exists()
     ), f"Datasetmap file {args.path_to_datasetmap} does not exist"
     assert args.path_to_pdb.exists(), f"PDB folder {args.path_to_pdb} does not exist"
+    # Load datasetmap
     datasetmap = np.genfromtxt(f"{args.path_to_datasetmap}", delimiter=",", dtype=str)
+    # Extract PDB codes
     pdb_codes = np.unique(datasetmap[:, 0])
     results_dict = {}
+    # Loop through all the pdb structures and extract rotamer label
     with Pool(processes=args.workers) as p:
         results_dict_list = p.starmap(
             tag_pdb_with_rot,
@@ -258,13 +362,18 @@ def main(args):
             ),
         )
         p.close()
+    # Flatten dictionary:
     for curr_res_dict in results_dict_list:
         results_dict.update(curr_res_dict)
+    # Load prediction matrix of model of interest:
     prediction_matrix = np.genfromtxt(args.input_path, delimiter=",", dtype=np.float16)
+    # Get rotamer categories:
     _, flat_categories = get_rotamer_codec()
+    # Get dictionary for 3 letter -> 1 letter conversion:
     res_to_r = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
-    # Create flat categories of 1 letter amino acid for each of the 338 rotamers
+    # Create flat categories of 1 letter amino acid for each of the 338 rotamers:
     rotamers_categories = [res_to_r[res.split("_")[0]] for res in flat_categories]
+    # Extract dictionaries with sequences:
     (
         pdb_to_sequence,
         pdb_to_probability,
@@ -274,6 +383,7 @@ def main(args):
     ) = extract_sequence_from_pred_matrix(
         datasetmap, prediction_matrix, rotamers_categories=rotamers_categories
     )
+    # Calculate metrics:
     calulate_metrics(pdb_to_probability, results_dict, flat_categories)
 
 

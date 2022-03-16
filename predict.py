@@ -41,7 +41,6 @@ def main(args):
     )
 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Predict with TIMED")
     parser.add_argument(
@@ -54,7 +53,10 @@ if __name__ == "__main__":
         "--path_to_dataset", type=str, help="Path to dataset file ending with .hdf5"
     )
     parser.add_argument(
-        "--path_to_datasetmap", default="datasetmap.txt", type=str, help="Path to dataset map ending with .txt"
+        "--path_to_datasetmap",
+        default="datasetmap.txt",
+        type=str,
+        help="Path to dataset map ending with .txt",
     )
     parser.add_argument(
         "--path_to_model", type=str, help="Path to model file ending with .h5"
