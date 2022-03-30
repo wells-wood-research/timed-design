@@ -6,11 +6,11 @@ from itertools import repeat
 from multiprocessing import Pool
 from pathlib import Path
 
-import ampal
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
+from isambard.modelling import scwrl
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -20,9 +20,60 @@ from sklearn.metrics import (
     roc_auc_score,
     top_k_accuracy_score,
 )
+from tqdm import tqdm
 
+import ampal
 from aposteriori.data_prep.create_frame_data_set import _fetch_pdb
 from utils import extract_sequence_from_pred_matrix, get_rotamer_codec
+
+
+def save_assembly_to_path(structure: ampal.Assembly, output_dir: Path, name: str):
+    output_path = output_dir / (name + ".pdb")
+    with open(output_path, "w") as f:
+        f.write(structure.pdb)
+
+
+def pack_sidechains(structure: ampal.Assembly, sequence: str) -> ampal.Assembly:
+    return scwrl.pack_side_chains_scwrl(
+        assembly=structure, sequences=sequence, rigid_rotamer_model=False
+    )
+
+
+def analyse_with_scwrl(
+    pdb_to_seq: dict, pdb_to_assembly: dict, output_path: Path, suffix: str
+):
+    for pdb in tqdm(pdb_to_seq.keys(), desc="Packing sequence in PDB with SCWRL"):
+        pdb_outpath = output_path / (pdb + suffix + ".pdb")
+        if pdb_outpath.exists():
+            print(f"PDB {pdb} at {pdb_outpath} already exists.")
+        elif pdb in pdb_to_assembly.keys():
+            try:
+                if len(pdb_to_assembly[pdb].backbone) > 1:
+                    # pdb_to_assembly[pdb] = ampal.Assembly(pdb_to_assembly[pdb][0])
+                    pdb_to_seq[pdb] = [pdb_to_seq[pdb]] * len(pdb_to_assembly[pdb])
+                else:
+                    pdb_to_seq[pdb] = [pdb_to_seq[pdb]]
+                try:
+                    scwrl_structure = pack_sidechains(
+                        pdb_to_assembly[pdb], pdb_to_seq[pdb]
+                    )
+                    save_assembly_to_path(
+                        structure=scwrl_structure,
+                        output_dir=output_path,
+                        name=pdb + suffix,
+                    )
+                except ValueError as e:
+                    print(f"Attempted packing on structure {pdb}, but got {e}")
+            except ValueError as e:
+                print(f"Attempted selecting backbone on structure {pdb}, but got {e}")
+            except KeyError as e:
+                print(f"Attempted selecting backbone on structure {pdb}, but got {e}")
+            except ChildProcessError as e:
+                print(
+                    f"Attempted selecting backbone on structure {pdb}, but SCWRL failed: {e}"
+                )
+        else:
+            print(f"Error with structure {pdb}. Assembly not found.")
 
 
 def plot_cm(
@@ -291,10 +342,10 @@ def extract_rotamer_encoding(pdb_code: str, monomer: ampal.Assembly) -> dict:
         except TypeError:
             all_rot.append(np.nan)
 
-    return {f"{pdb_code}{monomer.id}": all_rot}
+    return {f"{pdb_code[:4]}{monomer.id}": all_rot}
 
 
-def tag_pdb_with_rot(pdb_code: str, pdb_path: Path) -> dict:
+def tag_pdb_with_rot(pdb_code: str, pdb_path: Path) -> (dict, dict):
     """
     Tag pdb file with rotamer (note: the pdb file is not modified)
 
@@ -311,10 +362,10 @@ def tag_pdb_with_rot(pdb_code: str, pdb_path: Path) -> dict:
         {pdb_code_monomer.id: all_rot}
     """
     out_dir = pdb_path / pdb_code[1:3]
-    pdb_path = out_dir / (pdb_code + ".pdb1.gz")
+    pdb_path = out_dir / (pdb_code[:4] + ".pdb1.gz")
     if not pdb_path.exists():
         out_dir.mkdir(parents=True, exist_ok=True)
-        pdb_path = out_dir / (pdb_code + ".pdb1")
+        pdb_path = out_dir / (pdb_code[:4] + ".pdb1")
         if not pdb_path.exists():
             pdb_path = _fetch_pdb(pdb_code, verbosity=1, output_folder=out_dir)
         assembly = ampal.load_pdb(pdb_path)
@@ -334,12 +385,16 @@ def tag_pdb_with_rot(pdb_code: str, pdb_path: Path) -> dict:
     elif isinstance(assembly, ampal.Polypeptide):
         assembly.tag_sidechain_dihedrals()
         result_dict = extract_rotamer_encoding(pdb_code, assembly)
+    assembly_dict = {list(result_dict.keys())[0]: assembly}
 
-    return result_dict
+    return result_dict, assembly_dict
 
 
 def main(args):
     args.input_path = Path(args.input_path)
+    args.output_path = Path(args.output_path)
+    # Create output folder if it does not exist:
+    args.output_path.mkdir(parents=True, exist_ok=True)
     args.path_to_datasetmap = Path(args.path_to_datasetmap)
     args.path_to_pdb = Path(args.path_to_pdb)
     assert args.input_path.exists(), f"Input file {args.input_path} does not exist"
@@ -352,6 +407,7 @@ def main(args):
     # Extract PDB codes
     pdb_codes = np.unique(datasetmap[:, 0])
     results_dict = {}
+    pdb_to_assemblies = {}
     # Loop through all the pdb structures and extract rotamer label
     with Pool(processes=args.workers) as p:
         results_dict_list = p.starmap(
@@ -363,8 +419,10 @@ def main(args):
         )
         p.close()
     # Flatten dictionary:
-    for curr_res_dict in results_dict_list:
+    for curr_dict in results_dict_list:
+        curr_res_dict, curr_assembly_dict = curr_dict
         results_dict.update(curr_res_dict)
+        pdb_to_assemblies.update(curr_assembly_dict)
     # Load prediction matrix of model of interest:
     prediction_matrix = np.genfromtxt(args.input_path, delimiter=",", dtype=np.float16)
     # Get rotamer categories:
@@ -385,11 +443,21 @@ def main(args):
     )
     # Calculate metrics:
     calulate_metrics(pdb_to_probability, results_dict, flat_categories)
+    # Analyse rotamers with SCWRL (requires SCWRL install)
+    analyse_with_scwrl(
+        pdb_to_sequence, pdb_to_assemblies, args.output_path, suffix="timed"
+    )
+    analyse_with_scwrl(
+        pdb_to_real_sequence, pdb_to_assemblies, args.output_path, suffix="real"
+    )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--input_path", type=str, help="Path to model .csv file")
+    parser.add_argument(
+        "--output_path", default="output/", type=str, help="Path to save analysis"
+    )
     parser.add_argument(
         "--path_to_pdb",
         type=str,

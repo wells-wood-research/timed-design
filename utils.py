@@ -528,7 +528,8 @@ def extract_sequence_from_pred_matrix(
     is_consensus = False
     res_to_r_dic = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
     if rotamers_categories:
-        res_dic = [res_to_r_dic[res.split("_")[0]] for res in rotamers_categories]
+        res_dic = rotamers_categories
+        # res_dic = [res_to_r_dic[res.split("_")[0]] for res in rotamers_categories]
     else:
         res_dic = list(standard_amino_acids.keys())
 
