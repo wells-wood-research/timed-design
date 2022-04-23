@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
-    name="timed-predict",
+    name="timedpredict",
     version="0.1.0",
     author="Leonardo V. Castorina, Wells Wood Research Group",
     author_email="chris.wood@ed.ac.uk",
@@ -17,6 +17,5 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.8",
-    packages=find_packages(include=["utils"]),
+    packages=find_packages("utils"),
 )
