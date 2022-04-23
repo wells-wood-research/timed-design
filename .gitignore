@@ -653,7 +653,6 @@ isambard
 *.h5
 *.csv
 *.fasta
-*.txt
 *.pdb
 *.zip
 *.hdf5
