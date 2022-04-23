@@ -1,7 +1,7 @@
 import argparse
 from pathlib import Path
 
-from utils import load_dataset_and_predict
+from utils.utils import load_dataset_and_predict
 
 
 def main(args):

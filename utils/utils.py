@@ -1,14 +1,14 @@
 import sys
-import typing as t
 import warnings
 from itertools import product
-from math import ceil
 from pathlib import Path
 
 import h5py
 import numpy as np
 import tensorflow as tf
+import typing as t
 from ampal.amino_acids import side_chain_dihedrals, standard_amino_acids
+from math import ceil
 from numpy import genfromtxt
 from tensorflow.keras.metrics import top_k_categorical_accuracy
 from tqdm import tqdm
@@ -616,13 +616,13 @@ def save_outputs_to_file(
     """
     # Save dataset map only at the beginning:
     if model == 0:
-        with open("encoded_labels.csv", "a") as f:
+        with open("../encoded_labels.csv", "a") as f:
             y_true = np.asarray(y_true)
             np.savetxt(f, y_true, delimiter=",", fmt="%i")
     flat_dataset_map = np.asarray(flat_dataset_map)
     # Save dataset map only at the beginning:
-    if Path("datasetmap.txt").exists() == False:
-        with open("datasetmap.txt", "a") as f:
+    if Path("../datasetmap.txt").exists() == False:
+        with open("../datasetmap.txt", "a") as f:
             # Output Dataset Map to txt:
             np.savetxt(f, flat_dataset_map, delimiter=",", fmt="%s")
 
