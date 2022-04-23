@@ -649,3 +649,14 @@ PDBench/
 ampal/
 aposteriori/
 isambard
+*.png
+*.h5
+*.csv
+*.fasta
+*.txt
+*.pdb
+*.zip
+*.hdf5
+*.grp
+
+

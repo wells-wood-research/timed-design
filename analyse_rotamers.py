@@ -1,6 +1,5 @@
 import argparse
 import gzip
-import typing as t
 from collections import Counter
 from itertools import repeat
 from multiprocessing import Pool
@@ -9,12 +8,12 @@ from pathlib import Path
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
+import typing as t
 from ampal.amino_acids import standard_amino_acids
 from isambard.modelling import scwrl
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
-    confusion_matrix,
     precision_score,
     recall_score,
     roc_auc_score,
@@ -43,7 +42,7 @@ def analyse_with_scwrl(
     pdb_to_seq: dict, pdb_to_assembly: dict, output_path: Path, suffix: str
 ):
     for pdb in tqdm(pdb_to_seq.keys(), desc="Packing sequence in PDB with SCWRL"):
-        pdb_outpath = output_path / (pdb + suffix + ".pdb")
+        pdb_outpath = output_path / (pdb + "_" + suffix + ".pdb")
         if pdb_outpath.exists():
             print(f"PDB {pdb} at {pdb_outpath} already exists.")
         elif pdb in pdb_to_assembly.keys():
@@ -173,7 +172,7 @@ def create_rot_cm(cm: np.ndarray, rot_categories: t.List[str], mode: str):
 
 
 def calulate_metrics(
-    pdb_to_probability: dict, pdb_to_rotamer: dict, rot_categories: t.List[str]
+    pdb_to_probability: dict, pdb_to_rotamer: dict, rot_categories: t.List[str], suffix: str
 ):
     """
     Calculates useful metrics for rotamer performance analysis:
@@ -243,6 +242,7 @@ def calulate_metrics(
         y_argmax,
         labels=list(range(len(rot_categories))),
         target_names=rot_categories,
+        output_dict=True,  # Returns a dictionary
     )
     accuracy = accuracy_score(y_true, y_argmax)
     accuracy_2 = top_k_accuracy_score(
@@ -296,12 +296,23 @@ def calulate_metrics(
     print(count_labels)
     print(count_pred)
     print(bias)
+    with open(f"results_{suffix}.txt", "w") as f:
+        f.write(f"Metrics AUC_OVR: {auc_ovr}\n")
+        f.write(f"Metrics AUC_OVO: {auc_ovo}\n")
+        f.write(f"Metrics Macro-Precision: {precision} Macro-Recall: {recall}\n")
+        f.write(
+            f"Accuracy: {accuracy}, accuracy_2: {accuracy_2}, accuracy_3: {accuracy_3}, accuracy_4: {accuracy_4}, accuracy_5: {accuracy_5}, precision: {precision}, recall: {recall}\n"
+        )
+        f.write("Report:\n")
+        f.write(f"{report}\n")
+        f.write("Bias:\n")
+        f.write(f"{bias}\n")
     weights = np.array([count_labels[r] for r in range(338)])
     weights = weights / np.sum(weights)
     unweighted_cm = confusion_matrix(
         y_true, y_argmax, normalize="all", labels=list(range(338))
     )
-    create_rot_cm(unweighted_cm, rot_categories, mode="unweighted")
+    create_rot_cm(unweighted_cm, rot_categories, mode=f"{suffix}_unweighted")
     sample_weights = [weights[int(y)] for y in y_true]
     weighted_cm = confusion_matrix(
         y_true,
@@ -310,7 +321,7 @@ def calulate_metrics(
         sample_weight=sample_weights,
         labels=list(range(338)),
     )
-    create_rot_cm(weighted_cm, rot_categories, mode="weighted")
+    create_rot_cm(weighted_cm, rot_categories, mode=f"{suffix}_weighted")
 
 
 def extract_rotamer_encoding(pdb_code: str, monomer: ampal.Assembly) -> dict:
@@ -345,7 +356,7 @@ def extract_rotamer_encoding(pdb_code: str, monomer: ampal.Assembly) -> dict:
     return {f"{pdb_code[:4]}{monomer.id}": all_rot}
 
 
-def tag_pdb_with_rot(pdb_code: str, pdb_path: Path) -> (dict, dict):
+def _tag_pdb_with_rot(pdb_code: str, pdb_path: Path) -> (dict, dict):
     """
     Tag pdb file with rotamer (note: the pdb file is not modified)
 
@@ -360,9 +371,18 @@ def tag_pdb_with_rot(pdb_code: str, pdb_path: Path) -> (dict, dict):
     -------
     result_dict: dict
         {pdb_code_monomer.id: all_rot}
+    assembly_dict: dict
+        {pdb_code_monomer.id: ampal.Assembly}
     """
-    out_dir = pdb_path / pdb_code[1:3]
-    pdb_path = out_dir / (pdb_code[:4] + ".pdb1.gz")
+    if "_" in pdb_code:
+        pdb_path = pdb_path / (pdb_code + ".pdb")
+        if not pdb_path.exists():
+            # Exit
+            print(f"Could not find {pdb_path}")
+            return (None, None)
+    else:
+        out_dir = pdb_path / pdb_code[1:3]
+        pdb_path = out_dir / (pdb_code[:4] + ".pdb1.gz")
     if not pdb_path.exists():
         out_dir.mkdir(parents=True, exist_ok=True)
         pdb_path = out_dir / (pdb_code[:4] + ".pdb1")
@@ -370,8 +390,13 @@ def tag_pdb_with_rot(pdb_code: str, pdb_path: Path) -> (dict, dict):
             pdb_path = _fetch_pdb(pdb_code, verbosity=1, output_folder=out_dir)
         assembly = ampal.load_pdb(pdb_path)
     else:
-        with gzip.open(str(pdb_path), "rb") as inf:
-            assembly = ampal.load_pdb(inf.read().decode(), path=False)
+        if pdb_path.suffix == ".pdb":
+            assembly = ampal.load_pdb(str(pdb_path))
+        elif pdb_path.suffix == ".gz":
+            with gzip.open(str(pdb_path), "rb") as inf:
+                assembly = ampal.load_pdb(inf.read().decode(), path=False)
+        else:
+            raise ValueError(f"Expected filetype to be either .pdb or .gz but got {pdb_path.suffix} {pdb_path}")
     if isinstance(assembly, ampal.AmpalContainer):
         assembly = assembly[0]
     if isinstance(assembly, ampal.Assembly):
@@ -390,9 +415,44 @@ def tag_pdb_with_rot(pdb_code: str, pdb_path: Path) -> (dict, dict):
     return result_dict, assembly_dict
 
 
+def tag_pdb_with_rot(workers: int, path_to_pdb: Path, pdb_codes: np.ndarray) -> (dict, dict):
+    """
+
+    Parameters
+    ----------
+    args
+    pdb_codes
+
+    Returns
+    -------
+
+    """
+    results_dict = {}
+    pdb_to_assemblies = {}
+    # Loop through all the pdb structures and extract rotamer label
+    with Pool(processes=workers) as p:
+        results_dict_list = p.starmap(
+            _tag_pdb_with_rot,
+            zip(
+                pdb_codes,
+                repeat(path_to_pdb),
+            ),
+        )
+        p.close()
+    # Flatten dictionary:
+    for curr_dict in results_dict_list:
+        curr_res_dict, curr_assembly_dict = curr_dict
+        if curr_res_dict is not None:
+            results_dict.update(curr_res_dict)
+            pdb_to_assemblies.update(curr_assembly_dict)
+
+    return results_dict, pdb_to_assemblies
+
+
 def main(args):
     args.input_path = Path(args.input_path)
-    args.output_path = Path(args.output_path)
+    model_name = args.input_path.stem
+    args.output_path = Path(f"{args.output_path}_{model_name}")
     # Create output folder if it does not exist:
     args.output_path.mkdir(parents=True, exist_ok=True)
     args.path_to_datasetmap = Path(args.path_to_datasetmap)
@@ -406,23 +466,7 @@ def main(args):
     datasetmap = np.genfromtxt(f"{args.path_to_datasetmap}", delimiter=",", dtype=str)
     # Extract PDB codes
     pdb_codes = np.unique(datasetmap[:, 0])
-    results_dict = {}
-    pdb_to_assemblies = {}
-    # Loop through all the pdb structures and extract rotamer label
-    with Pool(processes=args.workers) as p:
-        results_dict_list = p.starmap(
-            tag_pdb_with_rot,
-            zip(
-                pdb_codes,
-                repeat(args.path_to_pdb),
-            ),
-        )
-        p.close()
-    # Flatten dictionary:
-    for curr_dict in results_dict_list:
-        curr_res_dict, curr_assembly_dict = curr_dict
-        results_dict.update(curr_res_dict)
-        pdb_to_assemblies.update(curr_assembly_dict)
+    results_dict, pdb_to_assemblies = tag_pdb_with_rot(args.workers, args.path_to_pdb, pdb_codes)
     # Load prediction matrix of model of interest:
     prediction_matrix = np.genfromtxt(args.input_path, delimiter=",", dtype=np.float16)
     # Get rotamer categories:
@@ -441,22 +485,36 @@ def main(args):
     ) = extract_sequence_from_pred_matrix(
         datasetmap, prediction_matrix, rotamers_categories=rotamers_categories
     )
-    # Calculate metrics:
-    calulate_metrics(pdb_to_probability, results_dict, flat_categories)
+    # Calculate Metrics:
+    # - Analysis 1: TIMED_rotamer vs real rotamers from crystal structure
+    calulate_metrics(pdb_to_probability, results_dict, flat_categories, suffix=f"{model_name}_vs_original")
+    # TODO: Save metrics
     # Analyse rotamers with SCWRL (requires SCWRL install)
-    analyse_with_scwrl(
-        pdb_to_sequence, pdb_to_assemblies, args.output_path, suffix="timed"
-    )
-    analyse_with_scwrl(
-        pdb_to_real_sequence, pdb_to_assemblies, args.output_path, suffix="real"
-    )
+    # First the sequence is packed with SCWRL and saved to PDB,
+    # Then, the same metrics as before are calculated and saved
+    # - Analysis 2: TIMED_rotamer vs TIMED sequence put through SCWRL
+    # analyse_with_scwrl(
+    #     pdb_to_sequence, pdb_to_assemblies, args.output_path, suffix=model_name
+    # )
+    # model_pdb_codes = np.core.defchararray.add(pdb_codes, model_name)
+    # model_results_dict, _ = tag_pdb_with_rot(args.workers,  args.output_path, model_pdb_codes)
+    # calulate_metrics(pdb_to_probability, model_results_dict, flat_categories, suffix=f"{model_name}_vs_pred+scwrl")
+    # TODO: Save metrics
+    # - Analysis 3: TIMED_rotamer vs Real sequence from crystal put through SCWRL
+    # analyse_with_scwrl(
+    #     pdb_to_real_sequence, pdb_to_assemblies, args.output_path, suffix="scwrl"
+    # )
+    # scwrl_pdb_codes = np.core.defchararray.add(pdb_codes, ("_" + "scwrl"))
+    # scwrl_results_dict, _ = tag_pdb_with_rot(args.workers, args.path_to_pdb, scwrl_pdb_codes)
+    # calulate_metrics(pdb_to_probability, scwrl_results_dict, flat_categories, suffix=f"{model_name}_vs_ori+scwrl")
+    # # TODO: Save metrics
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--input_path", type=str, help="Path to model .csv file")
     parser.add_argument(
-        "--output_path", default="output/", type=str, help="Path to save analysis"
+        "--output_path", default="output", type=str, help="Path to save analysis"
     )
     parser.add_argument(
         "--path_to_pdb",
