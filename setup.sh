@@ -22,7 +22,7 @@ check_requirements() {
 }
 
 install_python_packages() {
-  printf "\nInstalling PyTorch...\n"
+  printf "\nInstalling Packages...\n"
   conda install -q poetry -y
   conda install -q cython -y
   conda install -q tqdm -y
