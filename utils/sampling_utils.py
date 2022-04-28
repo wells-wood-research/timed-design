@@ -3,6 +3,8 @@ import json
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
 
+from utils.analyse_utils import calculate_seq_metrics
+
 
 def save_as(pdb_to_sampled, model_name, mode):
     """
@@ -56,3 +58,20 @@ def random_choice_prob_index(probs, axis=1, return_seq=True):
         return res[idxs]
     else:
         return idxs
+
+
+def sample_from_sequences(pdb, sample_n, pdb_to_probability):
+    pdb_to_sample = {}
+    # Sample from distribution
+    sampled_seq_list = []
+    # TODO parallelize:
+    for i in range(sample_n):
+        seq_list = random_choice_prob_index(np.array(pdb_to_probability[pdb]))
+        # Join seq from residue list to one string
+        sampled_seq = "".join(seq_list)
+        # Calculate sequence metrics
+        charge, iso_ph = calculate_seq_metrics(sampled_seq)
+        sampled_seq_list.append((sampled_seq, charge, iso_ph))
+    pdb_to_sample[pdb] = sampled_seq_list
+
+    return pdb_to_sample

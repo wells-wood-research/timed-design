@@ -1,13 +1,11 @@
 import argparse
+from itertools import repeat
+from multiprocessing import Pool
 from pathlib import Path
 
 import numpy as np
 
-from utils.analyse_utils import calculate_seq_metrics
-from utils.sampling_utils import (
-    random_choice_prob_index,
-    save_as,
-)
+from utils.sampling_utils import (sample_from_sequences, save_as)
 from utils.utils import extract_sequence_from_pred_matrix, get_rotamer_codec
 
 
@@ -43,22 +41,25 @@ def main(args):
     ) = extract_sequence_from_pred_matrix(
         dataset_map, prediction_matrix, rotamers_categories=flat_categories
     )
-    # TODO add multiprocessing:
-    pdb_to_sample = {}
+    pdb_codes = list(pdb_to_probability.keys())
     print(
-        f"Ready to sample {args.sample_n} for each of the {len(list(pdb_to_probability.keys()))} proteins."
+        f"Ready to sample {args.sample_n} for each of the {len(pdb_codes)} proteins."
     )
-    for pdb in pdb_to_probability.keys():
-        # Sample from distribution
-        sampled_seq_list = []
-        for i in range(args.sample_n):
-            seq_list = random_choice_prob_index(np.array(pdb_to_probability[pdb]))
-            # Join seq from residue list to one string
-            sampled_seq = "".join(seq_list)
-            # Calculate sequence metrics
-            charge, iso_ph = calculate_seq_metrics(sampled_seq)
-            sampled_seq_list.append((sampled_seq,charge, iso_ph))
-        pdb_to_sample[pdb] = sampled_seq_list
+    with Pool(processes=args.workers) as p:
+        pdb_to_sample_dict_list = p.starmap(
+            sample_from_sequences,
+            zip(
+                pdb_codes,
+                repeat(args.sample_n),
+                repeat(pdb_to_probability),
+            ),
+        )
+        p.close()
+    # Flatten dictionary:
+    pdb_to_sample = {}
+    for curr_dict in pdb_to_sample_dict_list:
+        if curr_dict is not None:
+            pdb_to_sample.update(curr_dict)
     # Save sequences to files:
     save_as(pdb_to_sample, model_name=args.path_to_pred_matrix.stem, mode=args.save_as)
 
@@ -96,6 +97,9 @@ if __name__ == "__main__":
         nargs="?",
         choices=["fasta", "json", "all"],
         help="Whether to save as fasta and json (default: all) or either of them.",
+    )
+    parser.add_argument(
+        "--workers", type=int, default=8, help="Number of workers to use (default: 8)"
     )
     params = parser.parse_args()
     main(params)
