@@ -27,7 +27,12 @@ def save_as(pdb_to_sampled, model_name, mode):
             for pdb, seq_list in pdb_to_sampled.items():
                 for i, seq in enumerate(seq_list):
                     outfile.write(f">{pdb}_{i}\n")
-                    outfile.write(f"{seq_list[i]}\n")
+                    outfile.write(f"{seq[0]}\n")  # the first item is the seq
+    print("Saving Metrics")
+    with open(f"{model_name}_metrics.csv", "w") as outfile:
+        for pdb, seq_list in pdb_to_sampled.items():
+            for i, seq in enumerate(seq_list):
+                outfile.write(f"{pdb},{seq[0]},{seq[1]},{seq[2]}\n")
 
 
 def random_choice_prob_index(probs, axis=1, return_seq=True):

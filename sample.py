@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 
+from utils.analyse_utils import calculate_seq_metrics
 from utils.sampling_utils import (
     random_choice_prob_index,
     save_as,
@@ -31,7 +32,8 @@ def main(args):
         codec, flat_categories = get_rotamer_codec()
     else:
         codec, flat_categories = None, None
-
+    # TODO: Load structures if available
+    # TODO: sample from rotamer
     (
         pdb_to_sequence,
         pdb_to_probability,
@@ -51,12 +53,14 @@ def main(args):
         sampled_seq_list = []
         for i in range(args.sample_n):
             seq_list = random_choice_prob_index(np.array(pdb_to_probability[pdb]))
+            # Join seq from residue list to one string
             sampled_seq = "".join(seq_list)
-            sampled_seq_list.append(sampled_seq)
+            # Calculate sequence metrics
+            charge, iso_ph = calculate_seq_metrics(sampled_seq)
+            sampled_seq_list.append((sampled_seq,charge, iso_ph))
         pdb_to_sample[pdb] = sampled_seq_list
+    # Save sequences to files:
     save_as(pdb_to_sample, model_name=args.path_to_pred_matrix.stem, mode=args.save_as)
-
-    raise ValueError
 
 
 if __name__ == "__main__":
@@ -81,7 +85,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--sample_n",
         type=int,
-        default=2,
+        default=100,
         help="Number of samples to be drawn from the distribution.",
     )
     parser.add_argument(
