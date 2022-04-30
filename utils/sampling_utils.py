@@ -70,8 +70,8 @@ def sample_from_sequences(pdb, sample_n, pdb_to_probability):
         # Join seq from residue list to one string
         sampled_seq = "".join(seq_list)
         # Calculate sequence metrics
-        charge, iso_ph = calculate_seq_metrics(sampled_seq)
-        sampled_seq_list.append((sampled_seq, charge, iso_ph))
+        metrics_tuple = calculate_seq_metrics(sampled_seq)
+        sampled_seq_list.append((sampled_seq, *metrics_tuple))
     pdb_to_sample[pdb] = sampled_seq_list
 
     return pdb_to_sample

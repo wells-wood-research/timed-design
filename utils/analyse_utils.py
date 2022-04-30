@@ -10,8 +10,8 @@ import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
-from ampal.analyse_protein import sequence_charge, sequence_isoelectric_point
-from aposteriori.data_prep.create_frame_data_set import _fetch_pdb
+from ampal.analyse_protein import sequence_charge, sequence_isoelectric_point, \
+    sequence_molecular_weight
 from isambard.modelling import scwrl
 from sklearn.metrics import (
     accuracy_score,
@@ -24,23 +24,15 @@ from sklearn.metrics import (
 )
 from tqdm import tqdm
 
+from aposteriori.data_prep.create_frame_data_set import _fetch_pdb
 from utils.utils import get_rotamer_codec
 
 
 def calculate_seq_metrics(seq):
-    """
-
-    Parameters
-    ----------
-    seq
-
-    Returns
-    -------
-
-    """
     charge = sequence_charge(seq)
     iso_ph = sequence_isoelectric_point(seq)
-    return charge, iso_ph
+    mw = sequence_molecular_weight(seq)
+    return charge, iso_ph, mw
 
 
 def save_assembly_to_path(structure: ampal.Assembly, output_dir: Path, name: str):
