@@ -4,6 +4,7 @@ from multiprocessing import Pool
 from pathlib import Path
 
 import numpy as np
+from ampal.amino_acids import standard_amino_acids
 
 from utils.sampling_utils import apply_temp_to_probs, sample_from_sequences, \
     save_as
@@ -30,13 +31,19 @@ def main(args):
         dtype=str,
     )
     # Apply temperature factor to prediction matrix:
-    prediction_matrix = apply_temp_to_probs(prediction_matrix, t=args.temp)
+    prediction_matrix = apply_temp_to_probs(prediction_matrix, t=args.temperature)
     # Load codec:
     if args.predict_rotamers:
-        codec, flat_categories = get_rotamer_codec()
+        # Get rotamer categories:
+        _, flat_categories = get_rotamer_codec()
+        # Get dictionary for 3 letter -> 1 letter conversion:
+        res_to_r = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
+        # Create flat categories of 1 letter amino acid for each of the 338 rotamers:
+        flat_categories = [res_to_r[res.split("_")[0]] for res in flat_categories]
+        # Extract dictionaries with sequences:
     else:
-        codec, flat_categories = None, None
-    # TODO: sample from rotamer
+        _, flat_categories = None, None
+
     (
         pdb_to_sequence,
         pdb_to_probability,
@@ -46,6 +53,9 @@ def main(args):
     ) = extract_sequence_from_pred_matrix(
         dataset_map, prediction_matrix, rotamers_categories=flat_categories
     )
+    # Clean up to free up RAM:
+    del prediction_matrix
+    del dataset_map
     # Select only 59 structures used for sampling:
     af2_benchmark_structures = ["1hq0A", "1a41A", "1ds1A", "1dvoA", "1g3pA",
                                 "1h70A", "1hxrA", "1jovA", "1l0sA", "1o7iA",
@@ -80,7 +90,7 @@ def main(args):
     # Save sequences to files:
     save_as(
         pdb_to_sample,
-        filename=f"{args.path_to_pred_matrix.stem}_temp_{args.temp}_n_{args.sample_n}",
+        filename=f"{args.path_to_pred_matrix.stem}_temp_{args.temperature}_n_{args.sample_n}",
         mode=args.save_as,
     )
 
@@ -123,7 +133,7 @@ if __name__ == "__main__":
         "--workers", type=int, default=8, help="Number of workers to use (default: 8)"
     )
     parser.add_argument(
-        "--temp",
+        "--temperature",
         type=float,
         default=1.0,
         help="Temperature factor to apply to softmax prediction. (default: 1.0 - unchanged)",
