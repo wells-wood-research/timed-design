@@ -91,4 +91,5 @@ def apply_temp_to_probs(probs, t=1.0):
 
     """
     probs = np.array(probs) ** (1 / t)
-    return probs / probs.sum()
+    p_sum = np.sum(probs, axis=1)
+    return probs / p_sum[:, None]

@@ -5,7 +5,8 @@ from pathlib import Path
 
 import numpy as np
 
-from utils.sampling_utils import apply_temp_to_probs, sample_from_sequences, save_as
+from utils.sampling_utils import apply_temp_to_probs, sample_from_sequences, \
+    save_as
 from utils.utils import extract_sequence_from_pred_matrix, get_rotamer_codec
 
 
@@ -20,7 +21,7 @@ def main(args):
     ), f"Dataset Map file {args.path_to_datasetmap} does not exist"
     # Load prediction matrix:
     prediction_matrix = np.genfromtxt(
-        args.path_to_pred_matrix, delimiter=",", dtype=np.float16
+        args.path_to_pred_matrix, delimiter=",", dtype=np.float64
     )
     # Load dataset map:
     dataset_map = np.genfromtxt(
@@ -30,12 +31,11 @@ def main(args):
     )
     # Apply temperature factor to prediction matrix:
     prediction_matrix = apply_temp_to_probs(prediction_matrix, t=args.temp)
-    # Load codec
+    # Load codec:
     if args.predict_rotamers:
         codec, flat_categories = get_rotamer_codec()
     else:
         codec, flat_categories = None, None
-    # TODO: Load structures if available
     # TODO: sample from rotamer
     (
         pdb_to_sequence,
@@ -46,7 +46,21 @@ def main(args):
     ) = extract_sequence_from_pred_matrix(
         dataset_map, prediction_matrix, rotamers_categories=flat_categories
     )
-    pdb_codes = list(pdb_to_probability.keys())
+    # Select only 59 structures used for sampling:
+    af2_benchmark_structures = ["1hq0A", "1a41A", "1ds1A", "1dvoA", "1g3pA",
+                                "1h70A", "1hxrA", "1jovA", "1l0sA", "1o7iA",
+                                "1uzkA", "1x8qA", "2bhuA", "2dyiA", "2imhA",
+                                "2j8kA", "2of3A", "2ra1A", "2v3gA", "2v3iA",
+                                "2w18A", "3cxbA", "3dadA", "3dkrA", "3e3vA",
+                                "3e4gA", "3e8tA", "3essA", "3giaA", "3gohA",
+                                "3hvmA", "3klkA", "3kluA", "3kstA", "3kyfA",
+                                "3maoA", "3o4pA", "3oajA", "3q1nA", "3rf0A",
+                                "3swgA", "3zbdA", "3zh4A", "4a6qA", "4ecoA",
+                                "4efpA", "4fcgA", "4fs7A", "4i1kA", "4le7A",
+                                "4m4dA", "4ozwA", "4wp6A", "4y5jA", "5b1rA",
+                                "5bufA", "5c12A", "5dicA", "6baqA"]
+    # TODO: Improve implementation
+    pdb_codes = af2_benchmark_structures
     print(f"Ready to sample {args.sample_n} for each of the {len(pdb_codes)} proteins.")
     with Pool(processes=args.workers) as p:
         pdb_to_sample_dict_list = p.starmap(
