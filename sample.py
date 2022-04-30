@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from utils.sampling_utils import (sample_from_sequences, save_as)
+from utils.sampling_utils import apply_temp_to_probs, sample_from_sequences, save_as
 from utils.utils import extract_sequence_from_pred_matrix, get_rotamer_codec
 
 
@@ -18,14 +18,19 @@ def main(args):
     assert (
         args.path_to_datasetmap.exists()
     ), f"Dataset Map file {args.path_to_datasetmap} does not exist"
+    # Load prediction matrix:
     prediction_matrix = np.genfromtxt(
         args.path_to_pred_matrix, delimiter=",", dtype=np.float16
     )
+    # Load dataset map:
     dataset_map = np.genfromtxt(
         args.path_to_datasetmap,
         delimiter=",",
         dtype=str,
     )
+    # Apply temperature factor to prediction matrix:
+    prediction_matrix = apply_temp_to_probs(prediction_matrix, t=args.temp)
+    # Load codec
     if args.predict_rotamers:
         codec, flat_categories = get_rotamer_codec()
     else:
@@ -42,9 +47,7 @@ def main(args):
         dataset_map, prediction_matrix, rotamers_categories=flat_categories
     )
     pdb_codes = list(pdb_to_probability.keys())
-    print(
-        f"Ready to sample {args.sample_n} for each of the {len(pdb_codes)} proteins."
-    )
+    print(f"Ready to sample {args.sample_n} for each of the {len(pdb_codes)} proteins.")
     with Pool(processes=args.workers) as p:
         pdb_to_sample_dict_list = p.starmap(
             sample_from_sequences,
@@ -61,7 +64,11 @@ def main(args):
         if curr_dict is not None:
             pdb_to_sample.update(curr_dict)
     # Save sequences to files:
-    save_as(pdb_to_sample, model_name=args.path_to_pred_matrix.stem, mode=args.save_as)
+    save_as(
+        pdb_to_sample,
+        filename=f"{args.path_to_pred_matrix.stem}_temp_{args.temp}_n_{args.sample_n}",
+        mode=args.save_as,
+    )
 
 
 if __name__ == "__main__":
@@ -100,6 +107,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--workers", type=int, default=8, help="Number of workers to use (default: 8)"
+    )
+    parser.add_argument(
+        "--temp",
+        type=float,
+        default=1.0,
+        help="Temperature factor to apply to softmax prediction. (default: 1.0 - unchanged)",
     )
     params = parser.parse_args()
     main(params)

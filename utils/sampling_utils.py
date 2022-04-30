@@ -6,14 +6,14 @@ from ampal.amino_acids import standard_amino_acids
 from utils.analyse_utils import calculate_seq_metrics
 
 
-def save_as(pdb_to_sampled, model_name, mode):
+def save_as(pdb_to_sampled, filename, mode):
     """
     Saves sampled sequences as fasta, json or both.
 
     Parameters
     ----------
     pdb_to_sampled
-    model_name
+    filename
     mode
 
     Returns
@@ -22,16 +22,16 @@ def save_as(pdb_to_sampled, model_name, mode):
     """
     print(f"Saving sampled sequences in mode {mode}")
     if mode != "fasta":
-        with open(f"{model_name}.json", "w") as outfile:
+        with open(f"{filename}.json", "w") as outfile:
             json.dump(pdb_to_sampled, outfile)
     if mode != "json":
-        with open(f"{model_name}.fasta", "w") as outfile:
+        with open(f"{filename}.fasta", "w") as outfile:
             for pdb, seq_list in pdb_to_sampled.items():
                 for i, seq in enumerate(seq_list):
                     outfile.write(f">{pdb}_{i}\n")
                     outfile.write(f"{seq[0]}\n")  # the first item is the seq
     print("Saving Metrics")
-    with open(f"{model_name}_metrics.csv", "w") as outfile:
+    with open(f"{filename}_metrics.csv", "w") as outfile:
         for pdb, seq_list in pdb_to_sampled.items():
             for i, seq in enumerate(seq_list):
                 outfile.write(f"{pdb},{seq[0]},{seq[1]},{seq[2]}\n")
@@ -75,3 +75,20 @@ def sample_from_sequences(pdb, sample_n, pdb_to_probability):
     pdb_to_sample[pdb] = sampled_seq_list
 
     return pdb_to_sample
+
+
+def apply_temp_to_probs(probs, t=1.0):
+    """
+    Adapted from https://stackoverflow.com/questions/37246030/how-to-change-the-temperature-of-a-softmax-output-in-keras
+
+    Parameters
+    ----------
+    probs
+    t
+
+    Returns
+    -------
+
+    """
+    probs = np.array(probs) ** (1 / t)
+    return probs / probs.sum()
