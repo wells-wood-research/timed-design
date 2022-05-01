@@ -12,6 +12,9 @@ from utils.utils import extract_sequence_from_pred_matrix, get_rotamer_codec
 
 
 def main(args):
+    # Set Random seed:
+    np.random.seed(args.seed)
+    # Sanitise Paths:
     args.path_to_pred_matrix = Path(args.path_to_pred_matrix)
     args.path_to_datasetmap = Path(args.path_to_datasetmap)
     assert (
@@ -24,14 +27,24 @@ def main(args):
     prediction_matrix = np.genfromtxt(
         args.path_to_pred_matrix, delimiter=",", dtype=np.float64
     )
+    print(args.support_old_datasetmap)
     # Load dataset map:
-    dataset_map = np.genfromtxt(
-        args.path_to_datasetmap,
-        delimiter=",",
-        dtype=str,
-    )
+    if args.support_old_datasetmap:
+        dataset_map = np.genfromtxt(
+            args.path_to_datasetmap,
+            delimiter=",",
+            dtype=str,
+        )
+    else:
+        dataset_map = np.genfromtxt(
+            args.path_to_datasetmap,
+            delimiter=" ",
+            dtype=str,
+            skip_header=3,
+        )
     # Apply temperature factor to prediction matrix:
-    prediction_matrix = apply_temp_to_probs(prediction_matrix, t=args.temperature)
+    if args.temperature != 1:
+        prediction_matrix = apply_temp_to_probs(prediction_matrix, t=args.temperature)
     # Load codec:
     if args.predict_rotamers:
         # Get rotamer categories:
@@ -51,11 +64,11 @@ def main(args):
         _,
         _,
     ) = extract_sequence_from_pred_matrix(
-        dataset_map, prediction_matrix, rotamers_categories=flat_categories
+        dataset_map,
+        prediction_matrix,
+        rotamers_categories=flat_categories,
+        old_datasetmap=args.support_old_datasetmap,
     )
-    # Clean up to free up RAM:
-    del prediction_matrix
-    del dataset_map
     # Select only 59 structures used for sampling:
     af2_benchmark_structures = ["1hq0A", "1a41A", "1ds1A", "1dvoA", "1g3pA",
                                 "1h70A", "1hxrA", "1jovA", "1l0sA", "1o7iA",
@@ -70,7 +83,7 @@ def main(args):
                                 "4m4dA", "4ozwA", "4wp6A", "4y5jA", "5b1rA",
                                 "5bufA", "5c12A", "5dicA", "6baqA"]
     # TODO: Improve implementation
-    pdb_codes = af2_benchmark_structures
+    pdb_codes = af2_benchmark_structures[1:3]
     print(f"Ready to sample {args.sample_n} for each of the {len(pdb_codes)} proteins.")
     with Pool(processes=args.workers) as p:
         pdb_to_sample_dict_list = p.starmap(
@@ -110,14 +123,14 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--predict_rotamers",
-        type=bool,
         default=False,
+        action="store_true",
         help="Whether model outputs predictions for 338 rotamers (True) or 20 residues (False).",
     )
     parser.add_argument(
         "--sample_n",
         type=int,
-        default=100,
+        default=2,
         help="Number of samples to be drawn from the distribution.",
     )
     parser.add_argument(
@@ -135,8 +148,17 @@ if __name__ == "__main__":
     parser.add_argument(
         "--temperature",
         type=float,
-        default=1.0,
+        default=0.01,
         help="Temperature factor to apply to softmax prediction. (default: 1.0 - unchanged)",
+    )
+    parser.add_argument(
+        "--support_old_datasetmap",
+        default=False,
+        action="store_true",
+        help="Whether model to import from the old datasetmap (default: False)",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="random seed (default: 42)"
     )
     params = parser.parse_args()
     main(params)

@@ -1,14 +1,14 @@
 import sys
+import typing as t
 import warnings
 from itertools import product
+from math import ceil
 from pathlib import Path
 
 import h5py
 import numpy as np
 import tensorflow as tf
-import typing as t
 from ampal.amino_acids import side_chain_dihedrals, standard_amino_acids
-from math import ceil
 from numpy import genfromtxt
 from tensorflow.keras.metrics import top_k_categorical_accuracy
 from tqdm import tqdm
@@ -497,6 +497,7 @@ def extract_sequence_from_pred_matrix(
     flat_dataset_map: t.List[t.Tuple],
     prediction_matrix: np.ndarray,
     rotamers_categories: t.List[str],
+    old_datasetmap: bool = False,
 ) -> (dict, dict, dict, dict, dict):
     """
     Extract sequence from prediction matrix and create pdb_to_sequence and
@@ -524,19 +525,26 @@ def extract_sequence_from_pred_matrix(
     pdb_to_real_sequence = {}
     pdb_to_consensus = {}
     pdb_to_consensus_prob = {}
-    # Wether the dataset contains multiple states of NMR or not
+    # Whether the dataset contains multiple states of NMR or not
     is_consensus = False
     res_to_r_dic = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
     if rotamers_categories:
         res_dic = rotamers_categories
-        # res_dic = [res_to_r_dic[res.split("_")[0]] for res in rotamers_categories]
     else:
         res_dic = list(standard_amino_acids.keys())
-
+    # Extract max idx for prediction matrix:
     max_idx = np.argmax(prediction_matrix, axis=1)
-
+    # Loop through dataset map to create dictionaries:
+    previous_count = 0
     for i in range(len(flat_dataset_map)):
-        pdb, chain, _, res = flat_dataset_map[i]
+        # Add support for different dataset maps:
+        if old_datasetmap:
+            pdb, chain, _, res = flat_dataset_map[i]
+            count = 1
+        else:
+            pdb, count = flat_dataset_map[i]
+            count = int(count)
+            # chain = ""
         if "_" in pdb:
             pdbchain = pdb
             is_consensus = True
@@ -544,19 +552,31 @@ def extract_sequence_from_pred_matrix(
             if len(pdb) == 5:
                 pdbchain = pdb
             else:
+                print(len(pdb))
+                print(pdb)
                 pdbchain = pdb + chain
-
+        # Prepare the dictionaries:
         if pdbchain not in pdb_to_sequence:
             pdb_to_sequence[pdbchain] = ""
             pdb_to_real_sequence[pdbchain] = ""
             pdb_to_probability[pdbchain] = []
+        # Loop through map:
+        for n in range(previous_count, previous_count+count):
+            if old_datasetmap:
+                idx = i
+            else:
+                idx = n
 
-        pred = list(prediction_matrix[i])
-        curr_res = res_dic[max_idx[i]]
-
-        pdb_to_probability[pdbchain].append(pred)
-        pdb_to_sequence[pdbchain] += curr_res
-        pdb_to_real_sequence[pdbchain] += res_to_r_dic[res]
+            pred = list(prediction_matrix[idx])
+            curr_res = res_dic[max_idx[idx]]
+            pdb_to_probability[pdbchain].append(pred)
+            pdb_to_sequence[pdbchain] += curr_res
+            if old_datasetmap:
+                pdb_to_real_sequence[pdbchain] += res_to_r_dic[res]
+            else:
+                pdb_to_real_sequence[pdbchain] += "0"
+        if not old_datasetmap:
+            previous_count += count
 
     if is_consensus:
         last_pdb = ""
