@@ -13,7 +13,7 @@ from utils.utils import extract_sequence_from_pred_matrix, get_rotamer_codec
 
 def main(args):
     # Set Random seed:
-    np.random.seed(args.seed)
+    np.random.default_rng(seed=args.seed)
     # Sanitise Paths:
     args.path_to_pred_matrix = Path(args.path_to_pred_matrix)
     args.path_to_datasetmap = Path(args.path_to_datasetmap)
