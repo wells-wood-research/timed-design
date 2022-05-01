@@ -83,7 +83,7 @@ def main(args):
                                 "4m4dA", "4ozwA", "4wp6A", "4y5jA", "5b1rA",
                                 "5bufA", "5c12A", "5dicA", "6baqA"]
     # TODO: Improve implementation
-    pdb_codes = af2_benchmark_structures[1:3]
+    pdb_codes = af2_benchmark_structures
     print(f"Ready to sample {args.sample_n} for each of the {len(pdb_codes)} proteins.")
     with Pool(processes=args.workers) as p:
         pdb_to_sample_dict_list = p.starmap(
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--sample_n",
         type=int,
-        default=2,
+        default=100,
         help="Number of samples to be drawn from the distribution.",
     )
     parser.add_argument(
@@ -148,7 +148,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--temperature",
         type=float,
-        default=0.01,
+        default=1,
         help="Temperature factor to apply to softmax prediction. (default: 1.0 - unchanged)",
     )
     parser.add_argument(
