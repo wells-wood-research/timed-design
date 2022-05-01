@@ -27,7 +27,6 @@ def main(args):
     prediction_matrix = np.genfromtxt(
         args.path_to_pred_matrix, delimiter=",", dtype=np.float64
     )
-    print(args.support_old_datasetmap)
     # Load dataset map:
     if args.support_old_datasetmap:
         dataset_map = np.genfromtxt(
