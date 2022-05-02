@@ -4,9 +4,12 @@ from pathlib import Path
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
 
-from utils.analyse_utils import analyse_with_scwrl, calculate_metrics, \
-    tag_pdb_with_rot
-from utils.utils import extract_sequence_from_pred_matrix, get_rotamer_codec
+from utils.analyse_utils import analyse_with_scwrl, calculate_metrics, tag_pdb_with_rot
+from utils.utils import (
+    extract_sequence_from_pred_matrix,
+    get_rotamer_codec,
+    load_datasetmap,
+)
 
 
 def main(args):
@@ -23,7 +26,9 @@ def main(args):
     ), f"Datasetmap file {args.path_to_datasetmap} does not exist"
     assert args.path_to_pdb.exists(), f"PDB folder {args.path_to_pdb} does not exist"
     # Load datasetmap
-    datasetmap = np.genfromtxt(f"{args.path_to_datasetmap}", delimiter=",", dtype=str)
+    datasetmap = load_datasetmap(
+        args.path_to_datasetmap, is_old=args.support_old_datasetmap
+    )
     # Extract PDB codes
     pdb_codes = np.unique(datasetmap[:, 0])
     results_dict, pdb_to_assemblies = tag_pdb_with_rot(
@@ -45,7 +50,10 @@ def main(args):
         pdb_to_consensus,
         pdb_to_consensus_prob,
     ) = extract_sequence_from_pred_matrix(
-        datasetmap, prediction_matrix, rotamers_categories=rotamers_categories
+        datasetmap,
+        prediction_matrix,
+        rotamers_categories=rotamers_categories,
+        old_datasetmap=args.support_old_datasetmap,
     )
     # Calculate Metrics:
     # - Analysis 1: TIMED_rotamer vs real rotamers from crystal structure
@@ -108,6 +116,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--workers", type=int, default=8, help="Number of workers to use (default: 8)"
+    )
+    parser.add_argument(
+        "--support_old_datasetmap",
+        default=False,
+        action="store_true",
+        help="Whether model to import from the old datasetmap (default: False)",
     )
     params = parser.parse_args()
     main(params)
