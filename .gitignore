@@ -658,4 +658,5 @@ isambard
 *.hdf5
 *.grp
 data/
+*.json
 

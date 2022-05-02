@@ -10,6 +10,8 @@ import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
+from ampal.analyse_protein import sequence_charge, sequence_isoelectric_point, \
+    sequence_molecular_weight
 from isambard.modelling import scwrl
 from sklearn.metrics import (
     accuracy_score,
@@ -23,15 +25,65 @@ from sklearn.metrics import (
 from tqdm import tqdm
 
 from aposteriori.data_prep.create_frame_data_set import _fetch_pdb
+from utils.utils import get_rotamer_codec
+
+
+def calculate_seq_metrics(seq: str) -> t.Tuple[float, float, float]:
+    """
+    Calculates sequence metrics.
+
+    Currently only supports: Charge at pH 7, Isoelectric Point, Molecular Weight
+
+    Parameters
+    ----------
+    seq: str
+        Sequence of residues
+
+    Returns
+    -------
+    metrics: t.Tuple[float, float, float]
+        (charge , iso_ph, mw)
+    """
+    charge = sequence_charge(seq)
+    iso_ph = sequence_isoelectric_point(seq)
+    mw = sequence_molecular_weight(seq)
+    return charge, iso_ph, mw
 
 
 def save_assembly_to_path(structure: ampal.Assembly, output_dir: Path, name: str):
+    """
+    Saves ampal assembly to specified path.
+
+    Parameters
+    ----------
+    structure: ampal.Assembly
+        Ampal assembly to be saved
+    output_dir: Path
+        Output Directory
+    name: str
+        Name of output File
+    """
     output_path = output_dir / (name + ".pdb")
     with open(output_path, "w") as f:
         f.write(structure.pdb)
 
 
 def pack_sidechains(structure: ampal.Assembly, sequence: str) -> ampal.Assembly:
+    """
+    Packs sequence of residues onto ampal assembly using SCWRL
+
+    Parameters
+    ----------
+    structure: ampal.Assembly
+        Ampal assembly to be saved
+    sequence: str
+        Sequence of amino acids
+
+    Returns
+    -------
+    packed_structure: ampal.Assembly
+        Packed structure with scwrl
+    """
     return scwrl.pack_side_chains_scwrl(
         assembly=structure, sequences=sequence, rigid_rotamer_model=False
     )
@@ -40,6 +92,20 @@ def pack_sidechains(structure: ampal.Assembly, sequence: str) -> ampal.Assembly:
 def analyse_with_scwrl(
     pdb_to_seq: dict, pdb_to_assembly: dict, output_path: Path, suffix: str
 ):
+    """
+    Analyses rotamer prediction with SCWRL
+
+    Parameters
+    ----------
+    pdb_to_seq: dict
+        {pdb_code: sequence}
+    pdb_to_assembly:
+        {pdb_code: ampal_assembly}
+    output_path: Path
+        Path to save analysis to.
+    suffix: str
+        Additional information to add to file.
+    """
     for pdb in tqdm(pdb_to_seq.keys(), desc="Packing sequence in PDB with SCWRL"):
         pdb_outpath = output_path / (pdb + "_" + suffix + ".pdb")
         if pdb_outpath.exists():
@@ -119,6 +185,7 @@ def plot_cm(
 
 def create_rot_cm(cm: np.ndarray, rot_categories: t.List[str], mode: str):
     """
+    Create rotamer confusion matrices.
 
     Parameters
     ----------
@@ -170,7 +237,7 @@ def create_rot_cm(cm: np.ndarray, rot_categories: t.List[str], mode: str):
         )
 
 
-def calulate_metrics(
+def calculate_metrics(
     pdb_to_probability: dict,
     pdb_to_rotamer: dict,
     rot_categories: t.List[str],
@@ -423,15 +490,23 @@ def tag_pdb_with_rot(
     workers: int, path_to_pdb: Path, pdb_codes: np.ndarray
 ) -> (dict, dict):
     """
+    Tag pdb file with rotamer (note: the pdb file is not modified).
+    Uses multiprocessing
 
     Parameters
     ----------
-    args
-    pdb_codes
+    args: argparse
+    path_to_pdb: Path
+        Path to the pdb structures
+    pdb_codes: np.ndarray
+        List of pdb codes to tag
 
     Returns
     -------
-
+    result_dict: dict
+        {pdb_code_monomer.id: all_rot}
+    assembly_dict: dict
+        {pdb_code_monomer.id: ampal.Assembly}
     """
     results_dict = {}
     pdb_to_assemblies = {}
