@@ -1,4 +1,5 @@
 import json
+import typing as t
 
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
@@ -6,19 +7,18 @@ from ampal.amino_acids import standard_amino_acids
 from utils.analyse_utils import calculate_seq_metrics
 
 
-def save_as(pdb_to_sampled, filename, mode):
+def save_as(pdb_to_sampled: dict, filename: str, mode: str):
     """
     Saves sampled sequences as fasta, json or both.
 
     Parameters
     ----------
-    pdb_to_sampled
-    filename
-    mode
-
-    Returns
-    -------
-
+    pdb_to_sampled: dict
+        Dictionary {pdb: sampled_sequence}
+    filename: str
+        Name of file output
+    mode: str
+        Whether to save in fasta, json or both
     """
     print(f"Saving sampled sequences in mode {mode}")
     if mode != "fasta":
@@ -37,18 +37,32 @@ def save_as(pdb_to_sampled, filename, mode):
                 outfile.write(f"{pdb},{seq[0]},{seq[1]},{seq[2]}\n")
 
 
-def random_choice_prob_index(probs, axis=1, return_seq=True, rotamer_categories=None):
+def random_choice_prob_index(
+    probs: np.ndarray,
+    axis: int = 1,
+    return_seq: bool = True,
+    rotamer_categories: t.Optional[np.ndarray, None] = None,
+) -> np.ndarray:
     """
+    Samples from a probability distribution and returns a sequence or the indeces sampled.
+
     Code adapted from: https://stackoverflow.com/questions/47722005/vectorizing-numpy-random-choice-for-given-2d-array-of-probabilities-along-an-a?noredirect=1&lq=1
 
     Parameters
     ----------
-    probs
-    axis
-    return_seq
+    probs: np.ndarray
+        2D Array with shape (n, n_categries) where n is the number of residues.
+    axis: int
+        Axis along which to select.
+    return_seq: bool
+        Whether to return a residue sequence (True) or the index (False)
+    rotamer_categories: t.Optional[np.ndarray, None]
+        Optionally rotamer categories can be used for sampling.
 
     Returns
     -------
+    sequence: np.ndarray
+        Sequence of residues or indeces sampled from a distribution
 
     """
     r = np.expand_dims(np.random.rand(probs.shape[1 - axis]), axis=axis)
@@ -63,7 +77,32 @@ def random_choice_prob_index(probs, axis=1, return_seq=True, rotamer_categories=
         return idxs
 
 
-def sample_from_sequences(pdb, sample_n, pdb_to_probability, rotamer_categories):
+def sample_from_sequences(
+    pdb: str,
+    sample_n: int,
+    pdb_to_probability: dict,
+    rotamer_categories: t.Optional[np.ndarray, None],
+) -> dict:
+    """
+    Sample from pdb sequences sample_n times.
+
+    Parameters
+    ----------
+    pdb: str
+        pdb to sample from
+    sample_n: int
+        Number of samples to be drawn
+    pdb_to_probability: dict
+        Dict {pdb: probability_distribution}
+    rotamer_categories: t.Optional[np.ndarray, None]
+        Whether to sample from a rotamer distribution or not.
+
+    Returns
+    -------
+    pdb_to_sample: dict
+        Dict {pdb: [(n, n_sample)]}
+
+    """
     pdb_to_sample = {}
     # Sample from distribution
     sampled_seq_list = []
@@ -84,17 +123,24 @@ def sample_from_sequences(pdb, sample_n, pdb_to_probability, rotamer_categories)
     return pdb_to_sample
 
 
-def apply_temp_to_probs(probs, t=1.0):
+def apply_temp_to_probs(probs: np.ndarray, t: int = 1.0):
     """
+    Applies a temperature factor to a softmax output probability.
+
     Adapted from https://stackoverflow.com/questions/37246030/how-to-change-the-temperature-of-a-softmax-output-in-keras
 
     Parameters
     ----------
-    probs
-    t
+    probs: np.ndarray
+        2D Probability Array
+    t: float
+        Temperature Factor
+
 
     Returns
     -------
+    probs: np.ndarray
+        2D Probability Array with t applied to it.
 
     """
     probs = np.array(probs) ** (1 / t)
