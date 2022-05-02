@@ -37,7 +37,7 @@ def save_as(pdb_to_sampled, filename, mode):
                 outfile.write(f"{pdb},{seq[0]},{seq[1]},{seq[2]}\n")
 
 
-def random_choice_prob_index(probs, axis=1, return_seq=True):
+def random_choice_prob_index(probs, axis=1, return_seq=True, rotamer_categories=None):
     """
     Code adapted from: https://stackoverflow.com/questions/47722005/vectorizing-numpy-random-choice-for-given-2d-array-of-probabilities-along-an-a?noredirect=1&lq=1
 
@@ -54,19 +54,26 @@ def random_choice_prob_index(probs, axis=1, return_seq=True):
     r = np.expand_dims(np.random.rand(probs.shape[1 - axis]), axis=axis)
     idxs = (probs.cumsum(axis=axis) > r).argmax(axis=axis)
     if return_seq:
-        res = np.array(list(standard_amino_acids.keys()))
+        if rotamer_categories:
+            res = np.array(rotamer_categories)
+        else:
+            res = np.array(list(standard_amino_acids.keys()))
         return res[idxs]
     else:
         return idxs
 
 
-def sample_from_sequences(pdb, sample_n, pdb_to_probability):
+def sample_from_sequences(pdb, sample_n, pdb_to_probability, rotamer_categories):
     pdb_to_sample = {}
     # Sample from distribution
     sampled_seq_list = []
     # TODO parallelize:
     for i in range(sample_n):
-        seq_list = random_choice_prob_index(np.array(pdb_to_probability[pdb]))
+        seq_list = random_choice_prob_index(
+            np.array(pdb_to_probability[pdb]),
+            return_seq=True,
+            rotamer_categories=rotamer_categories,
+        )
         # Join seq from residue list to one string
         sampled_seq = "".join(seq_list)
         # Calculate sequence metrics

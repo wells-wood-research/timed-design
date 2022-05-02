@@ -83,7 +83,9 @@ def main(args):
                                 "5bufA", "5c12A", "5dicA", "6baqA"]
     # TODO: Improve implementation
     pdb_codes = af2_benchmark_structures
-    print(f"Ready to sample {args.sample_n} for each of the {len(pdb_codes)} proteins.")
+    print(
+        f"Ready to sample {args.sample_n} for each of the {len(pdb_codes)} proteins from {args.path_to_pred_matrix.stem}."
+    )
     with Pool(processes=args.workers) as p:
         pdb_to_sample_dict_list = p.starmap(
             sample_from_sequences,
@@ -91,6 +93,7 @@ def main(args):
                 pdb_codes,
                 repeat(args.sample_n),
                 repeat(pdb_to_probability),
+                repeat(flat_categories)
             ),
         )
         p.close()
