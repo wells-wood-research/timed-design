@@ -55,11 +55,11 @@ def main(args):
         flat_categories,
         suffix=f"{model_name}_vs_original",
     )
-    # TODO: Save metrics
-    # Analyse rotamers with SCWRL (requires SCWRL install)
-    # First the sequence is packed with SCWRL and saved to PDB,
-    # Then, the same metrics as before are calculated and saved
-    # - Analysis 2: TIMED_rotamer vs TIMED sequence put through SCWRL
+
+    # - Analysis 2: TIMED_rotamer vs TIMED_rotamer sequence put through SCWRL
+    #     Analyse rotamers with SCWRL (requires SCWRL install)
+    #     First the sequence is packed with SCWRL and saved to PDB,
+    #     Then, the same metrics as before are calculated and saved
     analyse_with_scwrl(
         pdb_to_sequence, pdb_to_assemblies, args.output_path, suffix=model_name
     )
@@ -73,7 +73,6 @@ def main(args):
         flat_categories,
         suffix=f"{model_name}_vs_pred+scwrl",
     )
-    # TODO: Save metrics
     # - Analysis 3: TIMED_rotamer vs Real sequence from crystal put through SCWRL
     analyse_with_scwrl(
         pdb_to_real_sequence, pdb_to_assemblies, args.output_path, suffix="scwrl"
@@ -88,7 +87,6 @@ def main(args):
         flat_categories,
         suffix=f"{model_name}_vs_ori+scwrl",
     )
-    # TODO: Save metrics
 
 
 if __name__ == "__main__":
