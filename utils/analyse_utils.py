@@ -10,9 +10,11 @@ import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
-from ampal.analyse_protein import sequence_charge, sequence_isoelectric_point, \
-    sequence_molecular_weight
-from isambard.modelling import scwrl
+from ampal.analyse_protein import (
+    sequence_charge,
+    sequence_isoelectric_point,
+    sequence_molecular_weight,
+)
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -25,6 +27,7 @@ from sklearn.metrics import (
 from tqdm import tqdm
 
 from aposteriori.data_prep.create_frame_data_set import _fetch_pdb
+from scwrl_utils import pack_side_chains_scwrl
 from utils.utils import get_rotamer_codec
 
 
@@ -63,6 +66,7 @@ def save_assembly_to_path(structure: ampal.Assembly, output_dir: Path, name: str
     name: str
         Name of output File
     """
+    # Save assembly to path:
     output_path = output_dir / (name + ".pdb")
     with open(output_path, "w") as f:
         f.write(structure.pdb)
@@ -84,7 +88,7 @@ def pack_sidechains(structure: ampal.Assembly, sequence: str) -> ampal.Assembly:
     packed_structure: ampal.Assembly
         Packed structure with scwrl
     """
-    return scwrl.pack_side_chains_scwrl(
+    return pack_side_chains_scwrl(
         assembly=structure, sequences=sequence, rigid_rotamer_model=False
     )
 
@@ -106,6 +110,7 @@ def analyse_with_scwrl(
     suffix: str
         Additional information to add to file.
     """
+    pdb_to_scores = {}
     for pdb in tqdm(pdb_to_seq.keys(), desc="Packing sequence in PDB with SCWRL"):
         pdb_outpath = output_path / (pdb + "_" + suffix + ".pdb")
         if pdb_outpath.exists():
@@ -121,6 +126,7 @@ def analyse_with_scwrl(
                     scwrl_structure = pack_sidechains(
                         pdb_to_assembly[pdb], pdb_to_seq[pdb]
                     )
+                    pdb_to_scores[pdb] = scwrl_structure.tags["scwrl_score"]
                     save_assembly_to_path(
                         structure=scwrl_structure,
                         output_dir=output_path,
@@ -138,6 +144,7 @@ def analyse_with_scwrl(
                 )
         else:
             print(f"Error with structure {pdb}. Assembly not found.")
+    return pdb_to_scores
 
 
 def plot_cm(

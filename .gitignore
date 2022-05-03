@@ -659,4 +659,4 @@ isambard
 *.grp
 data/
 *.json
-
+*.txt

@@ -4,7 +4,8 @@ from pathlib import Path
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
 
-from utils.analyse_utils import analyse_with_scwrl, calculate_metrics, tag_pdb_with_rot
+from utils.analyse_utils import analyse_with_scwrl, calculate_metrics, \
+    tag_pdb_with_rot
 from utils.utils import (
     extract_sequence_from_pred_matrix,
     get_rotamer_codec,
@@ -13,14 +14,16 @@ from utils.utils import (
 
 
 def main(args):
-    args.input_path = Path(args.input_path)
-    model_name = args.input_path.stem
+    args.path_to_pred_matrix = Path(args.path_to_pred_matrix)
+    model_name = args.path_to_pred_matrix.stem
     args.output_path = Path(f"{args.output_path}_{model_name}")
     # Create output folder if it does not exist:
     args.output_path.mkdir(parents=True, exist_ok=True)
     args.path_to_datasetmap = Path(args.path_to_datasetmap)
     args.path_to_pdb = Path(args.path_to_pdb)
-    assert args.input_path.exists(), f"Input file {args.input_path} does not exist"
+    assert (
+        args.path_to_pred_matrix.exists()
+    ), f"Input file {args.path_to_pred_matrix} does not exist"
     assert (
         args.path_to_datasetmap.exists()
     ), f"Datasetmap file {args.path_to_datasetmap} does not exist"
@@ -35,7 +38,9 @@ def main(args):
         args.workers, args.path_to_pdb, pdb_codes
     )
     # Load prediction matrix of model of interest:
-    prediction_matrix = np.genfromtxt(args.input_path, delimiter=",", dtype=np.float16)
+    prediction_matrix = np.genfromtxt(
+        args.path_to_pred_matrix, delimiter=",", dtype=np.float16
+    )
     # Get rotamer categories:
     _, flat_categories = get_rotamer_codec()
     # Get dictionary for 3 letter -> 1 letter conversion:
@@ -68,7 +73,10 @@ def main(args):
     #     Analyse rotamers with SCWRL (requires SCWRL install)
     #     First the sequence is packed with SCWRL and saved to PDB,
     #     Then, the same metrics as before are calculated and saved
-    analyse_with_scwrl(
+    pdb_to_sequence = {pdb_codes[0]: pdb_to_sequence[pdb_codes[0]]}
+    pdb_to_assemblies = {pdb_codes[0]: pdb_to_assemblies[pdb_codes[0]]}
+    # Analyse with SCWRL and get scores
+    pdb_to_scores_rot = analyse_with_scwrl(
         pdb_to_sequence, pdb_to_assemblies, args.output_path, suffix=model_name
     )
     model_pdb_codes = np.core.defchararray.add(pdb_codes, model_name)
@@ -82,7 +90,7 @@ def main(args):
         suffix=f"{model_name}_vs_pred+scwrl",
     )
     # - Analysis 3: TIMED_rotamer vs Real sequence from crystal put through SCWRL
-    analyse_with_scwrl(
+    pdb_to_scores_real = analyse_with_scwrl(
         pdb_to_real_sequence, pdb_to_assemblies, args.output_path, suffix="scwrl"
     )
     scwrl_pdb_codes = np.core.defchararray.add(pdb_codes, ("_" + "scwrl"))
@@ -95,11 +103,21 @@ def main(args):
         flat_categories,
         suffix=f"{model_name}_vs_ori+scwrl",
     )
+    # Save SCWRL Scores
+    outfile_scwrl_score = args.output_path / "scwrl_scores.csv"
+    with open(outfile_scwrl_score, "w") as f:
+        f.write(f"PDB,score_rot,score_real")
+        for pdb in pdb_to_scores_rot.keys():
+            score_rot = pdb_to_scores_rot[pdb]
+            score_real = pdb_to_scores_real[pdb]
+            f.write(f"{pdb},{score_rot},{score_real}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="")
-    parser.add_argument("--input_path", type=str, help="Path to model .csv file")
+    parser.add_argument(
+        "--path_to_pred_matrix", type=str, help="Path to model .csv file"
+    )
     parser.add_argument(
         "--output_path", default="output", type=str, help="Path to save analysis"
     )
