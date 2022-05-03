@@ -1,7 +1,6 @@
 <div align="center">
   <img src="logo.png"><br>
   <h2>Protein Sequence Design Made Easy</h2><br>
-  <h3>Features TIMED, TIMED-rotamer, ProDCoNN, DenseCPD, DenseNet</h3><br>
 </div>
 
 [timed-predict](https://github.com/wells-wood-research/timed-predict) is a library to use protein sequence design models and analyse predictions. We feature retrained Keras models for novel models (**TIMED** and **TIMED-rotamer**) as well as re-implementations of well known models for which code or model are not intuitively available (**ProDCoNN**, **DenseCPD**, **DenseNet**). 
