@@ -4,8 +4,7 @@ from pathlib import Path
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
 
-from utils.analyse_utils import analyse_with_scwrl, calculate_metrics, \
-    tag_pdb_with_rot
+from utils.analyse_utils import analyse_with_scwrl, tag_pdb_with_rot
 from utils.utils import (
     extract_sequence_from_pred_matrix,
     get_rotamer_codec,
@@ -62,20 +61,17 @@ def main(args):
     )
     # Calculate Metrics:
     # - Analysis 1: TIMED_rotamer vs real rotamers from crystal structure
-    calculate_metrics(
-        pdb_to_probability,
-        results_dict,
-        flat_categories,
-        suffix=f"{model_name}_vs_original",
-    )
+    # calculate_metrics(
+    #     pdb_to_probability,
+    #     results_dict,
+    #     flat_categories,
+    #     suffix=f"{model_name}_vs_original",
+    # )
 
     # - Analysis 2: TIMED_rotamer vs TIMED_rotamer sequence put through SCWRL
     #     Analyse rotamers with SCWRL (requires SCWRL install)
     #     First the sequence is packed with SCWRL and saved to PDB,
     #     Then, the same metrics as before are calculated and saved
-    pdb_to_sequence = {pdb_codes[0]: pdb_to_sequence[pdb_codes[0]]}
-    pdb_to_assemblies = {pdb_codes[0]: pdb_to_assemblies[pdb_codes[0]]}
-    # Analyse with SCWRL and get scores
     pdb_to_scores_rot = analyse_with_scwrl(
         pdb_to_sequence, pdb_to_assemblies, args.output_path, suffix=model_name
     )
@@ -83,12 +79,12 @@ def main(args):
     model_results_dict, _ = tag_pdb_with_rot(
         args.workers, args.output_path, model_pdb_codes
     )
-    calculate_metrics(
-        pdb_to_probability,
-        model_results_dict,
-        flat_categories,
-        suffix=f"{model_name}_vs_pred+scwrl",
-    )
+    # calculate_metrics(
+    #     pdb_to_probability,
+    #     model_results_dict,
+    #     flat_categories,
+    #     suffix=f"{model_name}_vs_pred+scwrl",
+    # )
     # - Analysis 3: TIMED_rotamer vs Real sequence from crystal put through SCWRL
     pdb_to_scores_real = analyse_with_scwrl(
         pdb_to_real_sequence, pdb_to_assemblies, args.output_path, suffix="scwrl"
@@ -97,12 +93,12 @@ def main(args):
     scwrl_results_dict, _ = tag_pdb_with_rot(
         args.workers, args.path_to_pdb, scwrl_pdb_codes
     )
-    calculate_metrics(
-        pdb_to_probability,
-        scwrl_results_dict,
-        flat_categories,
-        suffix=f"{model_name}_vs_ori+scwrl",
-    )
+    # calculate_metrics(
+    #     pdb_to_probability,
+    #     scwrl_results_dict,
+    #     flat_categories,
+    #     suffix=f"{model_name}_vs_ori+scwrl",
+    # )
     # Save SCWRL Scores
     outfile_scwrl_score = args.output_path / "scwrl_scores.csv"
     with open(outfile_scwrl_score, "w") as f:
