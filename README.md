@@ -7,10 +7,10 @@
 [timed-predict](https://github.com/wells-wood-research/timed-predict) is a library to use protein sequence design models and analyse predictions. We feature retrained Keras models for novel models (**TIMED** and **TIMED-rotamer**) as well as re-implementations of well known models for which code or model are not intuitively available (**ProDCoNN**, **DenseCPD**, **DenseNet**). 
 
 Table of Contents:
-- [1. Use Models](#1-use-models=)
-- [2. Sample Sequences Using Monte Carlo](#2-sample-sequences-using-monte-carlo=)
-- [3. Analyse Rotamer Predictions](#3-analyse-rotamer-predictions=)
-- [4. Cite This Work](#3-cite-this-work=)
+- [1. Use Models](#1-use-models)
+- [2. Sample Sequences Using Monte Carlo](#2-sample-sequences-using-monte-carlo)
+- [3. Analyse Rotamer Predictions](#3-analyse-rotamer-predictions)
+- [4. Cite This Work](#4-cite-this-work)
 
 ## 1. Use Models:
 
