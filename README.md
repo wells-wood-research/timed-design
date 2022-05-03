@@ -1,17 +1,24 @@
 <div align="center">
   <img src="logo.png"><br>
-  <h2>Protein Sequence Design</h2><br>
+  <h2>Protein Sequence Design Made Easy</h2><br>
   <h3>Features TIMED, TIMED-rotamer, ProDCoNN, DenseCPD, DenseNet</h3><br>
 </div>
 
-[timed-predict](https://github.com/wells-wood-research/timed-predict) is a library to use protein sequence design models and analyse predictions. We feature retrained Keras models for novel models (TIMED and TIMED-rotamer) as well as re-implementations of well known models for which code or model are not intuitively available. 
+[timed-predict](https://github.com/wells-wood-research/timed-predict) is a library to use protein sequence design models and analyse predictions. We feature retrained Keras models for novel models (**TIMED** and **TIMED-rotamer**) as well as re-implementations of well known models for which code or model are not intuitively available (**ProDCoNN**, **DenseCPD**, **DenseNet**). 
+
+Table of Contents:
+- [1. Use Models](#1-use-models=)
+- [2. Sample Sequences Using Monte Carlo](#2-sample-sequences-using-monte-carlo=)
+- [3. Analyse Rotamer Predictions](#3-analyse-rotamer-predictions=)
+- [4. Cite This Work](#3-cite-this-work=)
 
 ## 1. Use Models:
 
 **File**: `predict.py`
+
 **Description**:  
 
-Use any model to predict a 3D structure. This requires a backbone in a .pdb structure. The side-chains of the residues will be automatically removed by [aposteriori](https://github.com/wells-wood-research/aposteriori), thus the prediction will be performed uniquely on the empty backbone. Your chosen model will attempt to predict which residues best fit the position and will return a .fasta file as well as a probability distribution in .csv format. 
+Use any model to predict a 3D structure. This requires a backbone in a .pdb structure. The side-chains of the residues will be automatically removed by [aposteriori](https://github.com/wells-wood-research/aposteriori), thus the prediction will be performed uniquely on the empty backbone. Your chosen model will attempt to predict which residues best fit the position and will return a `.fasta` file as well as a probability distribution in `.csv` format. 
 
 ### 1.1 Set up the environment:
 
@@ -148,11 +155,15 @@ python3 predict.py --path_to_dataset dataset.hdf5 --path_to_model timed_rot.h5 -
 **File**: `sample.py`
 **Description**:  
 
-Uses Monte Carlo sampling to sample sequences from a  probability distribution. A temperature factor can be applied to affect the distributions. It will return a .fasta file and/or a .json file with the sequences and a .csv file with basic sequence metrics such as isoelectric point, molecular weight and charge. Further metrics can be calculated using NetSolP-1.0 (see `scripts/run_netsolp.sh``).
+Uses Monte Carlo sampling to sample sequences from a  probability distribution. A temperature factor can be applied to affect the distributions. It will return a `.fasta` file and/or a `.json` file with the sequences and a `.csv` file with basic sequence metrics such as isoelectric point, molecular weight and charge. Further metrics can be calculated using NetSolP-1.0 (see `scripts/run_netsolp.sh`).
 
 ## 3. Analyse Rotamer Predictions:
 
 **File**: `analyse_rotamers.py`
 **Description**:  
+
+---Under construction---
+
+## 4. Cite This Work:
 
 ---Under construction---

@@ -7,6 +7,7 @@ Below a description of each of them:
 ## Running Rotamer Analysis 
 
 **File**: `run_rotamer_analysis.sh`
+
 **Description**: 
 
 Runs a rotamer analysis on a set of PDBs. Then performs four sets of analyses.
@@ -31,6 +32,7 @@ Then saves metrics to a file. It also saves SCWRL_scores for the predicted and t
 ## Running Monte Carlo Sampling 
 
 **File**: `run_sampling.sh`
+
 **Description**: 
 
 Runs a Monte Carlo sampling on 59 structures used in the PDBench Paper. We apply a temperature factor [0.1, 0.5, 1, 2, 5] and sample 200 new sequences for each structure.
@@ -41,6 +43,7 @@ We do this for all the models deep and default in 20 (residues) or 338 (rotamers
 ## Running Netsolp
 
 **File**: `run_netsolp.sh`
+
 **Description**: 
 
 Runs the NetSolP-1.0 model for the .fasta structures sampled by Monte Carlo. We use the Distilled Model and predict both Solubility (S) and Expressivity (U).
