@@ -159,7 +159,7 @@ def analyse_with_scwrl(
     # Saves errors to file:
     output_error_path = output_path / f"errors_scwrl{suffix}.csv"
     print(f"Got {len(pdb_to_errors)} errors when attempting to pack {len(pdb_to_seq)} sequences. Saved errors in file {output_error_path}")
-    with open(output_path, "w") as f:
+    with open(output_error_path, "w") as f:
         for pdb, err in pdb_to_errors.items():
             f.write(f"{pdb},{err}\n")
     return pdb_to_scores

@@ -3,7 +3,7 @@
   <h2>Protein Sequence Design Made Easy</h2><br>
 </div>
 
-[timed-predict](https://github.com/wells-wood-research/timed-predict) is a library to use protein sequence design models and analyse predictions. We feature retrained Keras models for novel models (**TIMED** and **TIMED-rotamer**) as well as re-implementations of well known models for which code or model are not intuitively available (**ProDCoNN**, **DenseCPD**, **DenseNet**). 
+[timed-design](https://github.com/wells-wood-research/timed-design) is a library to use protein sequence design models and analyse predictions. We feature retrained Keras models for novel models (**TIMED** and **TIMED-rotamer**) as well as re-implementations of well known models for which code or model are not intuitively available (**ProDCoNN**, **DenseCPD**, **DenseNet**). 
 
 ## Table of Contents:
 - [1. Use Models](#1-use-models)
@@ -24,11 +24,11 @@ Use any model to predict a 3D structure. This requires a backbone in a .pdb stru
 1. Setting up conda:
 
 ```
-conda create --name timed_predict python=3.8
+conda create --name timed_design python=3.8
 ```
 
 ```
-conda activate timed_predict
+conda activate timed_design
 ```
 
 #### Easy Install:
