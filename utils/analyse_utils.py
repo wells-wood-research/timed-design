@@ -95,7 +95,7 @@ def pack_sidechains(structure: ampal.Assembly, sequence: str) -> ampal.Assembly:
 
 def analyse_with_scwrl(
     pdb_to_seq: dict, pdb_to_assembly: dict, output_path: Path, suffix: str
-):
+) -> (dict, dict):
     """
     Analyses rotamer prediction with SCWRL
 
@@ -109,12 +109,21 @@ def analyse_with_scwrl(
         Path to save analysis to.
     suffix: str
         Additional information to add to file.
+
+    Returns
+    -------
+    pdb_to_scores: dict
+        Dict {pdb_code: scwrl_score}
+    pdb_to_errors: dict
+         Dict {pdb_code: Error}
     """
     pdb_to_scores = {}
+    pdb_to_errors ={}
     for pdb in tqdm(pdb_to_seq.keys(), desc="Packing sequence in PDB with SCWRL"):
         pdb_outpath = output_path / (pdb + "_" + suffix + ".pdb")
         if pdb_outpath.exists():
-            print(f"PDB {pdb} at {pdb_outpath} already exists.")
+            error = f"PDB {pdb} at {pdb_outpath} already exists."
+            pdb_to_errors[pdb] = error
         elif pdb in pdb_to_assembly.keys():
             try:
                 if len(pdb_to_assembly[pdb].backbone) > 1:
@@ -133,17 +142,26 @@ def analyse_with_scwrl(
                         name=pdb + suffix,
                     )
                 except ValueError as e:
-                    print(f"Attempted packing on structure {pdb}, but got {e}")
+                    error = f"Attempted packing on structure {pdb}, but got {e}"
+                    pdb_to_errors[pdb] = error
             except ValueError as e:
-                print(f"Attempted selecting backbone on structure {pdb}, but got {e}")
+                error = f"Attempted selecting backbone on structure {pdb}, but got {e}"
+                pdb_to_errors[pdb] = error
             except KeyError as e:
-                print(f"Attempted selecting backbone on structure {pdb}, but got {e}")
+                error = f"Attempted selecting backbone on structure {pdb}, but got {e}"
+                pdb_to_errors[pdb] = error
             except ChildProcessError as e:
-                print(
-                    f"Attempted selecting backbone on structure {pdb}, but SCWRL failed: {e}"
-                )
+                error = f"Attempted selecting backbone on structure {pdb}, but SCWRL failed: {e}"
+                pdb_to_errors[pdb] = error
         else:
-            print(f"Error with structure {pdb}. Assembly not found.")
+            error = f"Error with structure {pdb}. Assembly not found."
+            pdb_to_errors[pdb] = error
+    # Saves errors to file:
+    output_error_path = output_path / f"errors_scwrl{suffix}.csv"
+    print(f"Got {len(pdb_to_errors)} errors when attempting to pack {len(pdb_to_seq)} sequences. Saved errors in file {output_error_path}")
+    with open(output_path, "w") as f:
+        for pdb, err in pdb_to_errors.items():
+            f.write(f"{pdb},{err}\n")
     return pdb_to_scores
 
 

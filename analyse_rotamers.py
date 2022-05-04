@@ -72,10 +72,10 @@ def main(args):
     #     Analyse rotamers with SCWRL (requires SCWRL install)
     #     First the sequence is packed with SCWRL and saved to PDB,
     #     Then, the same metrics as before are calculated and saved
-    pdb_to_scores_rot = analyse_with_scwrl(
-        pdb_to_sequence, pdb_to_assemblies, args.output_path, suffix=model_name
+    pdb_to_scores_rot, _ = analyse_with_scwrl(
+        pdb_to_sequence, pdb_to_assemblies, args.output_path, suffix=f"_{model_name}"
     )
-    model_pdb_codes = np.core.defchararray.add(pdb_codes, model_name)
+    model_pdb_codes = np.core.defchararray.add(pdb_codes, f"_{model_name}")
     model_results_dict, _ = tag_pdb_with_rot(
         args.workers, args.output_path, model_pdb_codes
     )
@@ -86,10 +86,10 @@ def main(args):
     #     suffix=f"{model_name}_vs_pred+scwrl",
     # )
     # - Analysis 3: TIMED_rotamer vs Real sequence from crystal put through SCWRL
-    pdb_to_scores_real = analyse_with_scwrl(
-        pdb_to_real_sequence, pdb_to_assemblies, args.output_path, suffix="scwrl"
+    pdb_to_scores_real, _ = analyse_with_scwrl(
+        pdb_to_real_sequence, pdb_to_assemblies, args.output_path, suffix="_scwrl"
     )
-    scwrl_pdb_codes = np.core.defchararray.add(pdb_codes, ("_" + "scwrl"))
+    scwrl_pdb_codes = np.core.defchararray.add(pdb_codes, "_scwrl")
     scwrl_results_dict, _ = tag_pdb_with_rot(
         args.workers, args.path_to_pdb, scwrl_pdb_codes
     )
@@ -102,11 +102,11 @@ def main(args):
     # Save SCWRL Scores
     outfile_scwrl_score = args.output_path / "scwrl_scores.csv"
     with open(outfile_scwrl_score, "w") as f:
-        f.write(f"PDB,score_rot,score_real")
+        f.write(f"PDB,score_rot,score_real\n")
         for pdb in pdb_to_scores_rot.keys():
             score_rot = pdb_to_scores_rot[pdb]
             score_real = pdb_to_scores_real[pdb]
-            f.write(f"{pdb},{score_rot},{score_real}")
+            f.write(f"{pdb},{score_rot},{score_real}\n")
 
 
 if __name__ == "__main__":

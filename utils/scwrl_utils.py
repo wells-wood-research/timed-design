@@ -30,8 +30,8 @@ def parse_scwrl_out(scwrl_std_out, scwrl_pdb):
         r"Total minimal energy of the graph = ([-0-9.]+)", scwrl_std_out
     )[0]
     # Add temperature factors to SCWRL out
-    split_scwrl = scwrl_pdb.split("\\r\\n")[1]
-    split_scwrl = split_scwrl.split("\\n")
+    split_scwrl = scwrl_pdb.split("\r\n")[1]
+    split_scwrl = split_scwrl.split("\n")
     fixed_scwrl = []
     for line in split_scwrl:
         if len(line) < 80:
@@ -107,7 +107,7 @@ def run_scwrl(pdb, sequence, path=True, rigid_rotamer_model=True, hydrogens=Fals
         os.remove(scwrl_seq.name)
     if not scwrl_pdb:
         raise ChildProcessError("SCWRL failed to run. SCWRL:\n{}".format(scwrl_std_out))
-    return scwrl_std_out, str(scwrl_pdb)
+    return scwrl_std_out, scwrl_pdb.decode()
 
 
 def pack_side_chains_scwrl(
