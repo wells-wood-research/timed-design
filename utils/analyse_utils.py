@@ -118,22 +118,29 @@ def analyse_with_scwrl(
          Dict {pdb_code: Error}
     """
     pdb_to_scores = {}
-    pdb_to_errors ={}
-    for pdb in tqdm(pdb_to_seq.keys(), desc="Packing sequence in PDB with SCWRL"):
+    pdb_to_errors = {}
+    # Loop through each PDB code and pack them with SCWRL:
+    for pdb in tqdm(
+        pdb_to_seq.keys(), desc=f"Packing sequence in PDB {suffix} with SCWRL"
+    ):
         pdb_outpath = output_path / (pdb + "_" + suffix + ".pdb")
         if pdb_outpath.exists():
             error = f"PDB {pdb} at {pdb_outpath} already exists."
             pdb_to_errors[pdb] = error
-        elif pdb in pdb_to_assembly.keys():
+        elif pdb[:4] in pdb_to_assembly.keys():
             try:
-                if len(pdb_to_assembly[pdb].backbone) > 1:
-                    # pdb_to_assembly[pdb] = ampal.Assembly(pdb_to_assembly[pdb][0])
-                    pdb_to_seq[pdb] = [pdb_to_seq[pdb]] * len(pdb_to_assembly[pdb])
+                # If there are more than one backbones, add their sequences up for SCWRL:
+                if len(pdb_to_assembly[pdb[:4]].backbone) > 1:
+                    pdb_to_seq[pdb] = [pdb_to_seq[pdb]] * len(pdb_to_assembly[pdb[:4]])
+                # Else structure is already monomeric - no need to add sequences
                 else:
-                    pdb_to_seq[pdb] = [pdb_to_seq[pdb]]
+                    pdb_to_seq[pdb] = [
+                        pdb_to_seq[pdb]
+                    ]  # Sequences need to be in list for SCWRL4
+                # Attempt packing:
                 try:
                     scwrl_structure = pack_sidechains(
-                        pdb_to_assembly[pdb], pdb_to_seq[pdb]
+                        pdb_to_assembly[pdb[:4]], pdb_to_seq[pdb]
                     )
                     pdb_to_scores[pdb] = scwrl_structure.tags["scwrl_score"]
                     save_assembly_to_path(
@@ -144,10 +151,7 @@ def analyse_with_scwrl(
                 except ValueError as e:
                     error = f"Attempted packing on structure {pdb}, but got {e}"
                     pdb_to_errors[pdb] = error
-            except ValueError as e:
-                error = f"Attempted selecting backbone on structure {pdb}, but got {e}"
-                pdb_to_errors[pdb] = error
-            except KeyError as e:
+            except (ValueError, KeyError) as e:
                 error = f"Attempted selecting backbone on structure {pdb}, but got {e}"
                 pdb_to_errors[pdb] = error
             except ChildProcessError as e:
@@ -158,11 +162,13 @@ def analyse_with_scwrl(
             pdb_to_errors[pdb] = error
     # Saves errors to file:
     output_error_path = output_path / f"errors_scwrl{suffix}.csv"
-    print(f"Got {len(pdb_to_errors)} errors when attempting to pack {len(pdb_to_seq)} sequences. Saved errors in file {output_error_path}")
+    print(
+        f"Got {len(pdb_to_errors)} errors when attempting to pack {len(pdb_to_seq)} sequences. Saved errors in file {output_error_path}"
+    )
     with open(output_error_path, "w") as f:
         for pdb, err in pdb_to_errors.items():
             f.write(f"{pdb},{err}\n")
-    return pdb_to_scores
+    return pdb_to_scores, pdb_to_errors
 
 
 def plot_cm(
@@ -506,7 +512,8 @@ def _tag_pdb_with_rot(pdb_code: str, pdb_path: Path) -> (dict, dict):
     elif isinstance(assembly, ampal.Polypeptide):
         assembly.tag_sidechain_dihedrals()
         result_dict = extract_rotamer_encoding(pdb_code, assembly)
-    assembly_dict = {list(result_dict.keys())[0]: assembly}
+    # assembly_dict = {list(result_dict.keys())[0]: assembly}
+    assembly_dict = {pdb_code[:4]: assembly}
 
     return result_dict, assembly_dict
 

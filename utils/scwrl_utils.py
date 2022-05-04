@@ -7,11 +7,12 @@ import os
 import re
 import subprocess
 import tempfile
+import typing as t
 
 import ampal
 
 
-def parse_scwrl_out(scwrl_std_out, scwrl_pdb):
+def parse_scwrl_out(scwrl_std_out: str, scwrl_pdb: str):
     """Parses SCWRL output and returns PDB and SCWRL score.
     Parameters
     ----------
@@ -47,7 +48,13 @@ def parse_scwrl_out(scwrl_std_out, scwrl_pdb):
     return fixed_scwrl_str, float(score)
 
 
-def run_scwrl(pdb, sequence, path=True, rigid_rotamer_model=True, hydrogens=False):
+def run_scwrl(
+    pdb: str,
+    sequence: str,
+    path: bool = True,
+    rigid_rotamer_model: bool = True,
+    hydrogens: bool = False,
+) -> (str, str):
     """Runs SCWRL on input PDB strong or path to PDB and a sequence string.
 
     Parameters
@@ -111,8 +118,11 @@ def run_scwrl(pdb, sequence, path=True, rigid_rotamer_model=True, hydrogens=Fals
 
 
 def pack_side_chains_scwrl(
-    assembly, sequences, rigid_rotamer_model=True, hydrogens=False
-):
+    assembly: ampal.Assembly,
+    sequences: t.List[str],
+    rigid_rotamer_model: bool = True,
+    hydrogens: bool = False,
+) -> ampal.Assembly:
     """Packs side chains onto a protein structure.
 
     Parameters

@@ -609,8 +609,6 @@ def extract_sequence_from_pred_matrix(
             pdb_to_sequence[pdbchain] += curr_res
             if old_datasetmap:
                 pdb_to_real_sequence[pdbchain] += res_to_r_dic[res]
-            else:
-                pdb_to_real_sequence[pdbchain] += "0"
         if not old_datasetmap:
             previous_count += count
 
