@@ -8,7 +8,11 @@ from ampal.amino_acids import standard_amino_acids
 
 from utils.sampling_utils import apply_temp_to_probs, sample_from_sequences, \
     save_as
-from utils.utils import extract_sequence_from_pred_matrix, get_rotamer_codec
+from utils.utils import (
+    extract_sequence_from_pred_matrix,
+    get_rotamer_codec,
+    load_datasetmap,
+)
 
 
 def main(args):
@@ -27,20 +31,10 @@ def main(args):
     prediction_matrix = np.genfromtxt(
         args.path_to_pred_matrix, delimiter=",", dtype=np.float64
     )
-    # Load dataset map:
-    if args.support_old_datasetmap:
-        dataset_map = np.genfromtxt(
-            args.path_to_datasetmap,
-            delimiter=",",
-            dtype=str,
-        )
-    else:
-        dataset_map = np.genfromtxt(
-            args.path_to_datasetmap,
-            delimiter=" ",
-            dtype=str,
-            skip_header=3,
-        )
+    # Load datasetmap
+    datasetmap = load_datasetmap(
+        args.path_to_datasetmap, is_old=args.support_old_datasetmap
+    )
     # Apply temperature factor to prediction matrix:
     if args.temperature != 1:
         prediction_matrix = apply_temp_to_probs(prediction_matrix, t=args.temperature)
@@ -63,7 +57,7 @@ def main(args):
         _,
         _,
     ) = extract_sequence_from_pred_matrix(
-        dataset_map,
+        datasetmap,
         prediction_matrix,
         rotamers_categories=flat_categories,
         old_datasetmap=args.support_old_datasetmap,
@@ -93,7 +87,7 @@ def main(args):
                 pdb_codes,
                 repeat(args.sample_n),
                 repeat(pdb_to_probability),
-                repeat(flat_categories)
+                repeat(flat_categories),
             ),
         )
         p.close()

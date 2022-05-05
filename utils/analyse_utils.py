@@ -10,9 +10,11 @@ import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
-from ampal.analyse_protein import sequence_charge, sequence_isoelectric_point, \
-    sequence_molecular_weight
-from isambard.modelling import scwrl
+from ampal.analyse_protein import (
+    sequence_charge,
+    sequence_isoelectric_point,
+    sequence_molecular_weight,
+)
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -25,6 +27,7 @@ from sklearn.metrics import (
 from tqdm import tqdm
 
 from aposteriori.data_prep.create_frame_data_set import _fetch_pdb
+from utils.scwrl_utils import pack_side_chains_scwrl
 from utils.utils import get_rotamer_codec
 
 
@@ -63,6 +66,7 @@ def save_assembly_to_path(structure: ampal.Assembly, output_dir: Path, name: str
     name: str
         Name of output File
     """
+    # Save assembly to path:
     output_path = output_dir / (name + ".pdb")
     with open(output_path, "w") as f:
         f.write(structure.pdb)
@@ -84,14 +88,14 @@ def pack_sidechains(structure: ampal.Assembly, sequence: str) -> ampal.Assembly:
     packed_structure: ampal.Assembly
         Packed structure with scwrl
     """
-    return scwrl.pack_side_chains_scwrl(
+    return pack_side_chains_scwrl(
         assembly=structure, sequences=sequence, rigid_rotamer_model=False
     )
 
 
 def analyse_with_scwrl(
     pdb_to_seq: dict, pdb_to_assembly: dict, output_path: Path, suffix: str
-):
+) -> (dict, dict):
     """
     Analyses rotamer prediction with SCWRL
 
@@ -105,39 +109,66 @@ def analyse_with_scwrl(
         Path to save analysis to.
     suffix: str
         Additional information to add to file.
+
+    Returns
+    -------
+    pdb_to_scores: dict
+        Dict {pdb_code: scwrl_score}
+    pdb_to_errors: dict
+         Dict {pdb_code: Error}
     """
-    for pdb in tqdm(pdb_to_seq.keys(), desc="Packing sequence in PDB with SCWRL"):
+    pdb_to_scores = {}
+    pdb_to_errors = {}
+    # Loop through each PDB code and pack them with SCWRL:
+    for pdb in tqdm(
+        pdb_to_seq.keys(), desc=f"Packing sequence in PDB {suffix} with SCWRL"
+    ):
         pdb_outpath = output_path / (pdb + "_" + suffix + ".pdb")
         if pdb_outpath.exists():
-            print(f"PDB {pdb} at {pdb_outpath} already exists.")
-        elif pdb in pdb_to_assembly.keys():
+            error = f"PDB {pdb} at {pdb_outpath} already exists."
+            pdb_to_errors[pdb] = error
+        elif pdb[:4] in pdb_to_assembly.keys():
             try:
-                if len(pdb_to_assembly[pdb].backbone) > 1:
-                    # pdb_to_assembly[pdb] = ampal.Assembly(pdb_to_assembly[pdb][0])
-                    pdb_to_seq[pdb] = [pdb_to_seq[pdb]] * len(pdb_to_assembly[pdb])
+                # If there are more than one backbones, add their sequences up for SCWRL:
+                if len(pdb_to_assembly[pdb[:4]].backbone) > 1:
+                    pdb_to_seq[pdb] = [pdb_to_seq[pdb]] * len(pdb_to_assembly[pdb[:4]])
+                # Else structure is already monomeric - no need to add sequences
                 else:
-                    pdb_to_seq[pdb] = [pdb_to_seq[pdb]]
+                    pdb_to_seq[pdb] = [
+                        pdb_to_seq[pdb]
+                    ]  # Sequences need to be in list for SCWRL4
+                # Attempt packing:
                 try:
                     scwrl_structure = pack_sidechains(
-                        pdb_to_assembly[pdb], pdb_to_seq[pdb]
+                        pdb_to_assembly[pdb[:4]], pdb_to_seq[pdb]
                     )
+                    pdb_to_scores[pdb] = scwrl_structure.tags["scwrl_score"]
                     save_assembly_to_path(
                         structure=scwrl_structure,
                         output_dir=output_path,
                         name=pdb + suffix,
                     )
                 except ValueError as e:
-                    print(f"Attempted packing on structure {pdb}, but got {e}")
-            except ValueError as e:
-                print(f"Attempted selecting backbone on structure {pdb}, but got {e}")
-            except KeyError as e:
-                print(f"Attempted selecting backbone on structure {pdb}, but got {e}")
+                    error = f"Attempted packing on structure {pdb}, but got {e}"
+                    pdb_to_errors[pdb] = error
+            except (ValueError, KeyError) as e:
+                error = f"Attempted selecting backbone on structure {pdb}, but got {e}"
+                pdb_to_errors[pdb] = error
             except ChildProcessError as e:
-                print(
-                    f"Attempted selecting backbone on structure {pdb}, but SCWRL failed: {e}"
-                )
+                error = f"Attempted selecting backbone on structure {pdb}, but SCWRL failed: {e}"
+                pdb_to_errors[pdb] = error
         else:
-            print(f"Error with structure {pdb}. Assembly not found.")
+            error = f"Error with structure {pdb}. Assembly not found."
+            pdb_to_errors[pdb] = error
+    # Saves errors to file:
+    output_error_path = output_path / f"errors_scwrl{suffix}.csv"
+    print(
+        f"Got {len(pdb_to_errors)} errors when attempting to pack {len(pdb_to_seq)} sequences. Saved errors in file {output_error_path}"
+    )
+    with open(output_error_path, "w") as f:
+        for pdb, err in pdb_to_errors.items():
+            f.write(f"{pdb},{err}\n")
+    return pdb_to_scores, pdb_to_errors
 
 
 def plot_cm(
@@ -145,6 +176,7 @@ def plot_cm(
     y_labels: t.List[str],
     x_labels: t.List[str],
     title: str,
+    output_path: Path,
     display_colorbar: bool = False,
 ):
     """
@@ -178,12 +210,12 @@ def plot_cm(
     if display_colorbar:
         fig.colorbar(sm).set_label("Confusion Level (Range 0 - 1)")
     fig.tight_layout()
-    fig.savefig(f"{title.replace(' ', '_')}.png")
+    fig.savefig(output_path / f"{title.replace(' ', '_')}.png")
     # Save Confusion:
     plt.close()
 
 
-def create_rot_cm(cm: np.ndarray, rot_categories: t.List[str], mode: str):
+def create_rot_cm(cm: np.ndarray, rot_categories: t.List[str], mode: str, output_path: Path):
     """
     Create rotamer confusion matrices.
 
@@ -213,6 +245,7 @@ def create_rot_cm(cm: np.ndarray, rot_categories: t.List[str], mode: str):
             y_labels=curr_rot_cat,
             x_labels=rot_categories,
             title=f"{mode} {res} vs all 338 rot",
+            output_path=output_path,
         )
         if len(small_cm) > 1:  # Avoids bug with glycine and alanine
             plot_cm(
@@ -220,6 +253,7 @@ def create_rot_cm(cm: np.ndarray, rot_categories: t.List[str], mode: str):
                 y_labels=curr_rot_cat,
                 x_labels=curr_rot_cat,
                 title=f"{mode} {res} vs {res} rot",
+                output_path=output_path,
             )
         rot_res_cm = np.zeros(
             (sum(rot_idx), 20)
@@ -234,6 +268,7 @@ def create_rot_cm(cm: np.ndarray, rot_categories: t.List[str], mode: str):
             y_labels=curr_rot_cat,
             x_labels=list(standard_amino_acids.values()),
             title=f"{mode} {res} vs 20 res",
+            output_path=output_path,
         )
 
 
@@ -242,6 +277,7 @@ def calculate_metrics(
     pdb_to_rotamer: dict,
     rot_categories: t.List[str],
     suffix: str,
+    output_path: Path,
 ):
     """
     Calculates useful metrics for rotamer performance analysis:
@@ -365,7 +401,7 @@ def calculate_metrics(
     print(count_labels)
     print(count_pred)
     print(bias)
-    with open(f"results_{suffix}.txt", "w") as f:
+    with open(output_path / f"results_{suffix}.txt", "w") as f:
         f.write(f"Metrics AUC_OVR: {auc_ovr}\n")
         f.write(f"Metrics AUC_OVO: {auc_ovo}\n")
         f.write(f"Metrics Macro-Precision: {precision} Macro-Recall: {recall}\n")
@@ -381,7 +417,7 @@ def calculate_metrics(
     unweighted_cm = confusion_matrix(
         y_true, y_argmax, normalize="all", labels=list(range(338))
     )
-    create_rot_cm(unweighted_cm, rot_categories, mode=f"{suffix}_unweighted")
+    create_rot_cm(unweighted_cm, rot_categories, mode=f"{suffix}_unweighted", output_path=output_path,)
     sample_weights = [weights[int(y)] for y in y_true]
     weighted_cm = confusion_matrix(
         y_true,
@@ -390,7 +426,7 @@ def calculate_metrics(
         sample_weight=sample_weights,
         labels=list(range(338)),
     )
-    create_rot_cm(weighted_cm, rot_categories, mode=f"{suffix}_weighted")
+    create_rot_cm(weighted_cm, rot_categories, mode=f"{suffix}_weighted", output_path=output_path,)
 
 
 def extract_rotamer_encoding(pdb_code: str, monomer: ampal.Assembly) -> dict:
@@ -481,7 +517,8 @@ def _tag_pdb_with_rot(pdb_code: str, pdb_path: Path) -> (dict, dict):
     elif isinstance(assembly, ampal.Polypeptide):
         assembly.tag_sidechain_dihedrals()
         result_dict = extract_rotamer_encoding(pdb_code, assembly)
-    assembly_dict = {list(result_dict.keys())[0]: assembly}
+    # assembly_dict = {list(result_dict.keys())[0]: assembly}
+    assembly_dict = {pdb_code[:4]: assembly}
 
     return result_dict, assembly_dict
 

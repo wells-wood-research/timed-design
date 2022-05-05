@@ -24,6 +24,42 @@ def top_3_cat_acc(y_true, y_pred):
 tf.keras.utils.get_custom_objects()["top_3_cat_acc"] = top_3_cat_acc
 
 
+def load_datasetmap(path_to_datasetmap: Path, is_old: bool = False) -> np.ndarray:
+    """
+    Load dataset map. Supports old datasetmap pre-benchmark.
+
+    Parameters
+    ----------
+    path_to_datasetmap: Path
+        Path to the datasetmap to be loaded
+    is_old: bool
+        Whether the datasetmap is old. Note: this allows for backwards compatibility.
+
+    Returns
+    -------
+    dataset_map: np.ndarray
+        2D array of datasetmap
+    """
+    assert (
+        path_to_datasetmap.suffix == ".txt"
+    ), f"Expected Path {path_to_datasetmap} to be a .txt file but got {path_to_datasetmap.suffix}."
+    if is_old:
+        dataset_map = np.genfromtxt(
+            path_to_datasetmap,
+            delimiter=",",
+            dtype=str,
+        )
+    else:
+        dataset_map = np.genfromtxt(
+            path_to_datasetmap,
+            delimiter=" ",
+            dtype=str,
+            skip_header=3,
+        )
+
+    return dataset_map
+
+
 def extract_metadata_from_dataset(frame_dataset: Path) -> DatasetMetadata:
     """
     Retrieves the metadata of the dataset and does a sanity check of the version.
@@ -561,7 +597,7 @@ def extract_sequence_from_pred_matrix(
             pdb_to_real_sequence[pdbchain] = ""
             pdb_to_probability[pdbchain] = []
         # Loop through map:
-        for n in range(previous_count, previous_count+count):
+        for n in range(previous_count, previous_count + count):
             if old_datasetmap:
                 idx = i
             else:
@@ -573,8 +609,6 @@ def extract_sequence_from_pred_matrix(
             pdb_to_sequence[pdbchain] += curr_res
             if old_datasetmap:
                 pdb_to_real_sequence[pdbchain] += res_to_r_dic[res]
-            else:
-                pdb_to_real_sequence[pdbchain] += "0"
         if not old_datasetmap:
             previous_count += count
 
