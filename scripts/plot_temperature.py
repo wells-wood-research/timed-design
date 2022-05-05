@@ -12,7 +12,6 @@ sns.set_theme(style="darkgrid")
 def main(args):
     args.input_path = Path(args.input_path)
     assert args.input_path.exists(), f"Input file {args.input_path} does not exist"
-    all_results_arr = []
     results_arr = []
     column_names = ["model", "pdb", "seq", "charge", "isoelectric_point", "solubility", "expressivity", "temp"]
     # Loop through each model and temp:
@@ -37,8 +36,11 @@ def main(args):
             results_arr += curr_metrics.tolist()
     # Pool all results into one big array:
     results_arr = np.array(results_arr)
+    # Load results in pandas
     df = pd.DataFrame(data=results_arr, columns=column_names)
+    # Load as numbers: (genfromtxt workaround)
     df[["charge", "isoelectric_point", "solubility", "expressivity", "temp"]] = df[["charge", "isoelectric_point", "solubility", "expressivity", "temp"]].apply(pd.to_numeric)
+    # Graph Solubility and Expressivity
     ax = sns.lineplot(x="temp", y="solubility", hue="model", data=df, palette="Set2", style="model", markers=True, dashes=False, ci='sd')
     ax.set(ylim=(0, 1))
     ax.savefig("solubility.png")
