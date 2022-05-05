@@ -73,6 +73,7 @@ def main(args):
         results_dict,
         flat_categories,
         suffix=f"{model_name}_vs_original",
+        output_path=args.output_path,
     )
 
     # - Analysis 2: TIMED_rotamer vs TIMED_rotamer sequence put through SCWRL
@@ -91,6 +92,7 @@ def main(args):
         model_results_dict,
         flat_categories,
         suffix=f"{model_name}_vs_pred+scwrl",
+        output_path=args.output_path,
     )
 
     # - Analysis 3: TIMED_rotamer vs Real sequence from crystal put through SCWRL
@@ -106,6 +108,7 @@ def main(args):
         scwrl_results_dict,
         flat_categories,
         suffix=f"{model_name}_vs_ori+scwrl",
+        output_path=args.output_path,
     )
 
     # Finally, save all SCWRL Scores to file:

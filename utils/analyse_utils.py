@@ -176,6 +176,7 @@ def plot_cm(
     y_labels: t.List[str],
     x_labels: t.List[str],
     title: str,
+    output_path: Path,
     display_colorbar: bool = False,
 ):
     """
@@ -209,12 +210,12 @@ def plot_cm(
     if display_colorbar:
         fig.colorbar(sm).set_label("Confusion Level (Range 0 - 1)")
     fig.tight_layout()
-    fig.savefig(f"{title.replace(' ', '_')}.png")
+    fig.savefig(output_path / f"{title.replace(' ', '_')}.png")
     # Save Confusion:
     plt.close()
 
 
-def create_rot_cm(cm: np.ndarray, rot_categories: t.List[str], mode: str):
+def create_rot_cm(cm: np.ndarray, rot_categories: t.List[str], mode: str, output_path: Path):
     """
     Create rotamer confusion matrices.
 
@@ -244,6 +245,7 @@ def create_rot_cm(cm: np.ndarray, rot_categories: t.List[str], mode: str):
             y_labels=curr_rot_cat,
             x_labels=rot_categories,
             title=f"{mode} {res} vs all 338 rot",
+            output_path=output_path,
         )
         if len(small_cm) > 1:  # Avoids bug with glycine and alanine
             plot_cm(
@@ -251,6 +253,7 @@ def create_rot_cm(cm: np.ndarray, rot_categories: t.List[str], mode: str):
                 y_labels=curr_rot_cat,
                 x_labels=curr_rot_cat,
                 title=f"{mode} {res} vs {res} rot",
+                output_path=output_path,
             )
         rot_res_cm = np.zeros(
             (sum(rot_idx), 20)
@@ -265,6 +268,7 @@ def create_rot_cm(cm: np.ndarray, rot_categories: t.List[str], mode: str):
             y_labels=curr_rot_cat,
             x_labels=list(standard_amino_acids.values()),
             title=f"{mode} {res} vs 20 res",
+            output_path=output_path,
         )
 
 
@@ -273,6 +277,7 @@ def calculate_metrics(
     pdb_to_rotamer: dict,
     rot_categories: t.List[str],
     suffix: str,
+    output_path: Path,
 ):
     """
     Calculates useful metrics for rotamer performance analysis:
@@ -396,7 +401,7 @@ def calculate_metrics(
     print(count_labels)
     print(count_pred)
     print(bias)
-    with open(f"results_{suffix}.txt", "w") as f:
+    with open(output_path / f"results_{suffix}.txt", "w") as f:
         f.write(f"Metrics AUC_OVR: {auc_ovr}\n")
         f.write(f"Metrics AUC_OVO: {auc_ovo}\n")
         f.write(f"Metrics Macro-Precision: {precision} Macro-Recall: {recall}\n")
@@ -412,7 +417,7 @@ def calculate_metrics(
     unweighted_cm = confusion_matrix(
         y_true, y_argmax, normalize="all", labels=list(range(338))
     )
-    create_rot_cm(unweighted_cm, rot_categories, mode=f"{suffix}_unweighted")
+    create_rot_cm(unweighted_cm, rot_categories, mode=f"{suffix}_unweighted", output_path=output_path,)
     sample_weights = [weights[int(y)] for y in y_true]
     weighted_cm = confusion_matrix(
         y_true,
@@ -421,7 +426,7 @@ def calculate_metrics(
         sample_weight=sample_weights,
         labels=list(range(338)),
     )
-    create_rot_cm(weighted_cm, rot_categories, mode=f"{suffix}_weighted")
+    create_rot_cm(weighted_cm, rot_categories, mode=f"{suffix}_weighted", output_path=output_path,)
 
 
 def extract_rotamer_encoding(pdb_code: str, monomer: ampal.Assembly) -> dict:
