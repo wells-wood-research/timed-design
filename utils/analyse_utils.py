@@ -72,7 +72,7 @@ def save_assembly_to_path(structure: ampal.Assembly, output_dir: Path, name: str
         f.write(structure.pdb)
 
 
-def pack_sidechains(structure: ampal.Assembly, sequence: str) -> ampal.Assembly:
+def pack_sidechains(structure: ampal.Assembly, sequence: str, scwrl_path: Path) -> ampal.Assembly:
     """
     Packs sequence of residues onto ampal assembly using SCWRL
 
@@ -89,12 +89,12 @@ def pack_sidechains(structure: ampal.Assembly, sequence: str) -> ampal.Assembly:
         Packed structure with scwrl
     """
     return pack_side_chains_scwrl(
-        assembly=structure, sequences=sequence, rigid_rotamer_model=False
+        assembly=structure, sequences=sequence, rigid_rotamer_model=False, scwrl_path=scwrl_path,
     )
 
 
 def analyse_with_scwrl(
-    pdb_to_seq: dict, pdb_to_assembly: dict, output_path: Path, suffix: str
+    pdb_to_seq: dict, pdb_to_assembly: dict, output_path: Path, suffix: str, scwrl_path: Path
 ) -> (dict, dict):
     """
     Analyses rotamer prediction with SCWRL
@@ -140,7 +140,7 @@ def analyse_with_scwrl(
                 # Attempt packing:
                 try:
                     scwrl_structure = pack_sidechains(
-                        pdb_to_assembly[pdb[:4]], pdb_to_seq[pdb]
+                        pdb_to_assembly[pdb[:4]], pdb_to_seq[pdb], scwrl_path=scwrl_path
                     )
                     pdb_to_scores[pdb] = scwrl_structure.tags["scwrl_score"]
                     save_assembly_to_path(

@@ -8,6 +8,7 @@ import re
 import subprocess
 import tempfile
 import typing as t
+from pathlib import Path
 
 import ampal
 
@@ -51,6 +52,7 @@ def parse_scwrl_out(scwrl_std_out: str, scwrl_pdb: str):
 def run_scwrl(
     pdb: str,
     sequence: str,
+    scwrl_path: Path,
     path: bool = True,
     rigid_rotamer_model: bool = True,
     hydrogens: bool = False,
@@ -88,6 +90,7 @@ def run_scwrl(
             pdb = inf.read()
     pdb = pdb.encode()
     sequence = sequence.encode()
+    scwrl_path = str(scwrl_path)
     try:
         with tempfile.NamedTemporaryFile(
             delete=False
@@ -100,7 +103,7 @@ def run_scwrl(
             scwrl_tmp.seek(0)  # Resets the buffer back to the first line
             scwrl_seq.write(sequence)
             scwrl_seq.seek(0)
-            scwrl_command = f"/Users/leo/scwrl4/Scwrl4 -p /Users/leo/scwrl4/Scwrl4.ini -i {scwrl_tmp.name} -o {scwrl_out.name} -s {scwrl_seq.name}"
+            scwrl_command = f"{scwrl_path} -p {scwrl_path}/Scwrl4.ini -i {scwrl_tmp.name} -o {scwrl_out.name} -s {scwrl_seq.name}"
             if rigid_rotamer_model:
                 scwrl_command += " -v"
             if not hydrogens:
@@ -120,6 +123,7 @@ def run_scwrl(
 def pack_side_chains_scwrl(
     assembly: ampal.Assembly,
     sequences: t.List[str],
+    scwrl_path: Path,
     rigid_rotamer_model: bool = True,
     hydrogens: bool = False,
 ) -> ampal.Assembly:
@@ -159,6 +163,7 @@ def pack_side_chains_scwrl(
     scwrl_std_out, scwrl_pdb = run_scwrl(
         assembly.pdb,
         "".join(sequences),
+        scwrl_path=scwrl_path,
         path=False,
         rigid_rotamer_model=rigid_rotamer_model,
         hydrogens=hydrogens,
