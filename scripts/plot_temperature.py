@@ -12,6 +12,8 @@ sns.set_theme(style="darkgrid")
 def main(args):
     args.input_path = Path(args.input_path)
     assert args.input_path.exists(), f"Input file {args.input_path} does not exist"
+    args.metrics_baseline_path = Path(args.metrics_baseline_path)
+    assert args.metrics_baseline_path.exists(), f"Baseline file {args.metrics_baseline_path} does not exist"
     results_arr = []
     column_names = ["model", "pdb", "seq", "charge", "isoelectric_point", "solubility", "expressivity", "temp"]
     # Loop through each model and temp:
@@ -39,23 +41,42 @@ def main(args):
     # Load results in pandas
     df = pd.DataFrame(data=results_arr, columns=column_names)
     # Load as numbers: (genfromtxt workaround)
-    df[["charge", "isoelectric_point", "solubility", "expressivity", "temp"]] = df[["charge", "isoelectric_point", "solubility", "expressivity", "temp"]].apply(pd.to_numeric)
-    # Graph Solubility and Expressivity
-    ax = sns.lineplot(x="temp", y="solubility", hue="model", data=df, palette="Set2", style="model", markers=True, dashes=False, ci='sd')
-    ax.set(ylim=(0, 1))
-    ax.savefig("solubility.png")
+    df[["charge", "isoelectric_point", "solubility", "expressivity", "temp"]] = df[["charge", "isoelectric_point", "solubility", "expressivity", "temp"]].apply(pd.to_numeric, downcast='float')
+    # Load baseline:
+    baseline_arr = np.genfromtxt(args.metrics_baseline_path, delimiter=",", dtype=str, skip_header=1).tolist()
+    # Multiply to match the sample n:
+    baseline_arr = baseline_arr * (args.sample_n * len(args.temperature) * len(args.models))
+    baseline_arr = np.array(baseline_arr)
+    # Sort by pdb name:
+    baseline_arr = baseline_arr[baseline_arr[:, 0].argsort()]
+    # Select last two columns
+    sol_expr_arr = baseline_arr[:, 2:].astype('float32')
+    df[["solubility", "expressivity"]] = np.abs(df[["solubility", "expressivity"]] - sol_expr_arr)
+    # Graph Solubility and Expressivity:
+    ax = sns.lineplot(x="temp", y='solubility', hue="model", data=df, palette="Set2", style="model", markers=True, dashes=False)
+    ax.set(ylim=(0, 0.5), ylabel="MAE (solubility)")
+    ax.figure.savefig("solubility_error.png")
     plt.close()
-    ax = sns.lineplot(x="temp", y="expressivity", hue="model", data=df, palette="Set2", style="model", markers=True, dashes=False, ci='sd')
-    ax.set(ylim=(0, 1))
-    ax.savefig("expressivity.png")
-    plt.show()
-    pdb_df = df.groupby(['temp', 'model']).describe()
-    raise ValueError
+    ax = sns.lineplot(x="temp", y='expressivity', hue="model", data=df, palette="Set2", style="model", markers=True, dashes=False)
+    ax.set(ylim=(0, 0.5), ylabel="MAE (expressivity)")
+    ax.figure.savefig("expressivity_error.png")
+    plt.close()
+    # Graph Error on Sol and Exp:
+    df = df.groupby(['temp', 'model']).describe()
+    ax = sns.lineplot(x="temp", y=('solubility',   'std'), hue="model", data=df, palette="Set2", style="model", markers=True, dashes=False)
+    ax.set(ylim=(0, 0.5), ylabel="STDev on MAE (solubility)")
+    ax.figure.savefig("solubility_var.png")
+    plt.close()
+    ax = sns.lineplot(x="temp", y=('expressivity',   'std'), hue="model", data=df, palette="Set2", style="model", markers=True, dashes=False)
+    ax.set(ylim=(0, 0.5), ylabel="STDev on MAE (expressivity)")
+    ax.figure.savefig("expressivity_var.png")
+    plt.close()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--input_path", type=str, help="Path to input file")
+    parser.add_argument("--metrics_baseline_path", type=str, help="Path to the baseline metrics with Netsolp for the real sequences (.fasta file)")
     parser.add_argument(
         "--models",
         type=list,
