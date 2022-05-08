@@ -1,17 +1,70 @@
 <div align="center">
-  <img src="logo.png"><br>
+  <img src="img/logo.png"><br>
   <h2>Protein Sequence Design Made Easy</h2><br>
 </div>
 
 [timed-design](https://github.com/wells-wood-research/timed-design) is a library to use protein sequence design models and analyse predictions. We feature retrained Keras models for novel models (**TIMED** and **TIMED-rotamer**) as well as re-implementations of well known models for which code or model are not intuitively available (**ProDCoNN**, **DenseCPD**, **DenseNet**). 
 
 ## Table of Contents:
+- [0. Introduction](#0-introduction)
 - [1. Use Models](#1-use-models)
 - [2. Sample Sequences Using Monte Carlo](#2-sample-sequences-using-monte-carlo)
 - [3. Analyse Rotamer Predictions](#3-analyse-rotamer-predictions)
 - [4. Cite This Work](#4-cite-this-work)
 
-## 1. Use Models:
+## 0. Introduction
+
+### Background
+
+Proteins are macro-molecules present in all living organisms (and viruses). They are involved in important chemical reactions in metabolism, DNA replication and also have structural properties. 
+
+The 3D shape of the protein defines its function. Proteins are made of twenty subunits called amino acids (or residues), all of which have different atomic structures and chemical properties. Different combinations of amino acids produce different 3D shapes.
+
+The **Protein Folding Problem** aims at identifying the 3D shape of a protein based solely on the sequence of amino acid. This problem is being tackled by models like **AlphaFold2** by Google Deep Mind.
+
+The other side of this problem is the **Inverse Folding Problem** (Protein Sequence Design), that is, given a desired 3D structure with a useful function, identify the residue sequence that will reliably fold into this structure. This problem is arguably harder, as multiple sequence of amino acids can fit the same 3D shape. 
+
+Nature evolves by natural selection (depth first search), thus, the protein sequences sampled in nature account for a tiny fraction of all physically possible proteins. Even for a relatively small protein with around **200 amino acids**, there are around **10^260 possible sequences**, which is significantly more than that have been sampled in every cell of every organism since proteins arose. There are therefore many 3D shapes of proteins that are physically possible, potentially useful, which have not been explored by nature. Protein designers aim at unlocking the potential of this pool of unobserved proteins, known as the **dark matter of protein folding space**.
+
+### Protein Sequence Design with Deep Learning
+
+TIMED (Three-dimensional Inference Method for Efficient Design) is a Convolutional Neural Network (CNN) model to tackle the Inverse Folding Problem, developed by us. We also feature our implementation of models described in the literature but unavailable for public use. These models take a 3D shape (empty backbone) as input and predict the identity of the subunits at each position of the backbone, as shown below:
+
+<div align="center">
+  <img src="img/sequence_design.png"><br>
+</div>
+
+
+The input of the model is a cube of gridded, voxelised space (a "Frame") around each amino acid position of the backbone. For instance, for a 100-amino-acid protein we generate 100 frames of equal width, height and length and feed them to our models. To produce these frames we use a library we developed called [aposteriori](https://github.com/wells-wood-research/aposteriori). 
+
+The output of our models is a probability distribution over all amino acids at each position. For instance, at each position the models output a probability over every residue being at that position. For a 100-amino-acid protein will have an output of shape (100, 20) as there are twenty amino acids:
+
+<div align="center">
+  <img src="img/overview.png"><br>
+</div>
+
+### Improving Protein Sequence Design Further with Rotamers
+
+Amino acids are made of chemical bonds that can rotate in space, thus resulting in a different spacial configuration of the residue. These are called **Rotational Isomers (Rotamers)**, and longer residues like Lysine (K), tend to have more rotamers.
+
+Rather than predicting 20 amino acid, we built models to predict both the amino acid AND the rotamer configuration in space. Therefore, for one frame our model identifies both, the amino acid identity and its predicted conformation in space: 
+
+<div align="center">
+  <img src="img/rotamer_pred.png"><br>
+</div>
+
+The rotamer models therefore predict 338 classes rather than 20. **Rotamer models** tend to significantly **outperform conventional models**, even with the **same network structure**, while also providing increased granularity of predictions which can then be further refined using molecular dynamics simulations.
+
+We are the first in the field to validate rotamer models and provide them and various implementation of other models, free for use. 
+
+### Monte Carlo Sampling
+
+As the output of our models is a probability distribution, an alternative to picking the amino acid with the highest probability (argmax), is to sample from the probability distribution using methods like Monte Carlo. For one protein shape we can therefore generate several sequences that can then be screened for specific properties like charge, isoelectric point, solubility, and expressivity. 
+
+We provide a simple CLI interface to generate several of these design which output to a `.fasta` file.
+
+
+## 1. Use Models
 
 **File**: `predict.py`
 
@@ -19,7 +72,7 @@
 
 Use any model to predict a 3D structure. This requires a backbone in a .pdb structure. The side-chains of the residues will be automatically removed by [aposteriori](https://github.com/wells-wood-research/aposteriori), thus the prediction will be performed uniquely on the empty backbone. Your chosen model will attempt to predict which residues best fit the position and will return a `.fasta` file as well as a probability distribution in `.csv` format. 
 
-### 1.1 Set up the environment:
+### 1.1 Set up the environment
 
 1. Setting up conda:
 
@@ -137,7 +190,7 @@ eg.
 python3 predict.py --path_to_dataset dataset.hdf5 --path_to_model timed_2.h5
 ```
 
-### 1.3 Predicting Rotamers:
+### 1.3 Predicting Rotamers
 
 In order to use a rotamer model, use the flag `--predict_rotamers True`:
 
@@ -149,20 +202,20 @@ python3 predict.py --path_to_dataset dataset.hdf5 --path_to_model timed_rot.h5 -
 
 
 
-## 2. Sample Sequences Using Monte Carlo:
+## 2. Sample Sequences Using Monte Carlo
 
 **File**: `sample.py`
 **Description**:  
 
 Uses Monte Carlo sampling to sample sequences from a  probability distribution. A temperature factor can be applied to affect the distributions. It will return a `.fasta` file and/or a `.json` file with the sequences and a `.csv` file with basic sequence metrics such as isoelectric point, molecular weight and charge. Further metrics can be calculated using NetSolP-1.0 (see `scripts/run_netsolp.sh`).
 
-## 3. Analyse Rotamer Predictions:
+## 3. Analyse Rotamer Predictions
 
 **File**: `analyse_rotamers.py`
 **Description**:  
 
 ---Under construction---
 
-## 4. Cite This Work:
+## 4. Cite This Work
 
 ---Under construction---
