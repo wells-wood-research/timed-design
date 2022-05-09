@@ -35,13 +35,25 @@ TIMED (Three-dimensional Inference Method for Efficient Design) is a Convolution
 </div>
 
 
-The input of the model is a cube of gridded, voxelised space (a "Frame") around each amino acid position of the backbone. For instance, for a 100-amino-acid protein we generate 100 frames of equal width, height and length and feed them to our models. To produce these frames we use a library we developed called [aposteriori](https://github.com/wells-wood-research/aposteriori). 
+The input of the model is a cube of gridded, voxelised space (a "Frame") around each amino acid position of the backbone. The alpha Carbon is centered in the frame, and the frame is rotated so that the Alpha Carbon to Carbon bond lies along the x-axis. Each atom (C, N, O, alpha-C, beta-C) is one-hot-encoded in a different channel, thus producing a 4D array. The beta-Carbon position is hard-coded to the average position of all beta-Carbon in the protein 1QYS after the aforementioned rotations.
+
+For a 100-amino-acid protein we therefore generate 100 frames of equal width, height and length and feed them to our models. To produce these frames we use a library we developed called [aposteriori](https://github.com/wells-wood-research/aposteriori). 
 
 The output of our models is a probability distribution over all amino acids at each position. For instance, at each position the models output a probability over every residue being at that position. For a 100-amino-acid protein will have an output of shape (100, 20) as there are twenty amino acids:
 
 <div align="center">
   <img src="img/overview.png"><br>
 </div>
+
+#### TIMED Architecture
+
+The TIMED architecture features a Convolutional Block composed of a 3D Convolution Operation, followed by ELU Activation and Batch Normalisation. We feature several convolution blocks which end with Spatial Dropout and a Global Average Pooling layer rather than a Dense layer. The output of the softmax layer is either 20 (for the 20 residues) or 338 (for rotamers). The architecture is illustrated below 
+
+<div align="center">
+  <img src="img/timed_architecture.png"><br>
+</div>
+
+
 
 ### Improving Protein Sequence Design Further with Rotamers
 
