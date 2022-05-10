@@ -102,7 +102,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--af2_results_path", type=str, help="Path to input file")
     parser.add_argument("--fasta_path", type=str, help="Path to input file")
-    parser.add_argument("--pdb_paths", type=str, help="Path to input file")
+    parser.add_argument("--pdb_path", type=str, help="Path to input file")
 
     params = parser.parse_args()
     main(params)
