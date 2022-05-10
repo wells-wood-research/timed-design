@@ -96,6 +96,7 @@ def main(args):
         all_results.append(curr_results)
     all_results = np.array(all_results)
     np.savetxt("all_results.csv", all_results, delimiter=",", fmt='%s')
+    np.savetxt("errors.csv", np.array(error_log), delimiter=",", fmt='%s')
 
 
 if __name__ == "__main__":
