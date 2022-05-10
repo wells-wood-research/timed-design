@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pymol
+from tqdm import tqdm
 
 
 def calculate_GDT(pdb_original_path, pdb_predicted_path):
@@ -68,7 +69,7 @@ def main(args):
     error_log = []
     all_fasta_paths = list(args.fasta_path.glob("**/*.fasta"))
     all_results = []
-    for fasta_path in all_fasta_paths:
+    for fasta_path in tqdm(all_fasta_paths, desc="Analysing Fasta"):
         # Load .fasta:
         with open(fasta_path, "r") as f:
             lines = f.readlines()
