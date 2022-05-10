@@ -2,7 +2,9 @@ import argparse
 from pathlib import Path
 
 import numpy as np
-import pymol
+
+
+# import pymol
 
 
 def calculate_GDT(pdb_original_path, pdb_predicted_path):
@@ -85,7 +87,7 @@ def main(args):
         af2_path = args.af2_results_path / root_path
         assert af2_path.exists(), f"File path {af2_path} does not exist"
         # Find all PDBs in af2 path:
-        all_af2_paths = list(args.fasta_path.glob("*.pdb"))
+        all_af2_paths = list(args.af2_results_path.glob("**/*.pdb"))
         pdb_path = args.pdb_path / pdb[1:3] / (pdb[:4] + ".pdb1")
         assert pdb_path.exists(), f"PDB path {pdb_path} does not exist"
         curr_results = [model, pdb, n, temp]
@@ -94,7 +96,7 @@ def main(args):
             curr_results.append(curr_rmsd)
         all_results.append(curr_results)
     all_results = np.array(all_results)
-    np.savetxt("all_results.csv", all_results, delimiter=",")
+    np.savetxt("all_results.csv", all_results, delimiter=",", fmt='%s')
 
 
 if __name__ == "__main__":
