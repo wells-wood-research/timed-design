@@ -18,17 +18,19 @@ def calculate_GDT(pdb_original_path, pdb_predicted_path):
     cmd.load(pdb_predicted_path)
     sel1, sel2 = cmd.get_object_list("all")
     # Select only C alphas
-    sel1 += ' and name CA'
-    sel2 += ' and name CA'
-    cutoffs = [1., 2., 4., 8.]
-    cmd.align(sel1, sel2, cycles=0, transform=0, object='aln')
-    mapping = cmd.get_raw_alignment('aln')  # e.g. [[('prot1', 2530), ('prot2', 2540)], ...]
+    sel1 += " and name CA"
+    sel2 += " and name CA"
+    cutoffs = [1.0, 2.0, 4.0, 8.0]
+    cmd.align(sel1, sel2, cycles=0, transform=0, object="aln")
+    mapping = cmd.get_raw_alignment(
+        "aln"
+    )  # e.g. [[('prot1', 2530), ('prot2', 2540)], ...]
     distances = []
     for mapping_ in mapping:
-        atom1 = '%s and id %d' % (mapping_[0][0], mapping_[0][1])
-        atom2 = '%s and id %d' % (mapping_[1][0], mapping_[1][1])
+        atom1 = "%s and id %d" % (mapping_[0][0], mapping_[0][1])
+        atom2 = "%s and id %d" % (mapping_[1][0], mapping_[1][1])
         dist = cmd.get_distance(atom1, atom2)
-        cmd.alter(atom1, 'b = %.4f' % dist)
+        cmd.alter(atom1, "b = %.4f" % dist)
         distances.append(dist)
     distances = np.asarray(distances)
     gdts = []
@@ -52,9 +54,7 @@ def calculate_RMSD(pdb_original_path, pdb_predicted_path) -> float:
     sel1 += " and name CA"
     sel2 += " and name CA"
     cmd.align(sel1, sel2, cycles=0, transform=0, object="aln")
-    mapping = cmd.get_raw_alignment(
-        "aln"
-    )
+    mapping = cmd.get_raw_alignment("aln")
     rmsd = cmd.align(sel1, sel2)[0]
 
     return rmsd
@@ -76,10 +76,11 @@ def main(args):
         # Load .fasta:
         with open(fasta_path, "r") as f:
             lines = f.readlines()
-            pdb, temp, n = lines[0].strip(">").split("_")
+            model, pdb, temp, n = lines[0].strip(">").strip("\n").rsplit("_", 3)
         # Get rid of .fasta extension and extracts path
-        # eg: ../data/sampling/fasta/TIMED_1/TIMED_2.fasta -> /TIMED_1/TIMED_2
-        root_path = str(fasta_path.with_suffix("")).split(str(args.fasta_path))[1]
+        # eg: ../data/sampling/fasta/TIMED_1/TIMED_2.fasta -> TIMED_1/TIMED_2
+        # The last [1:] gets rid of the starting "/" character
+        root_path = str(fasta_path.with_suffix("")).split(str(args.fasta_path))[1][1:]
         # Find af2 path:
         af2_path = args.af2_results_path / root_path
         assert af2_path.exists(), f"File path {af2_path} does not exist"
@@ -87,9 +88,7 @@ def main(args):
         all_af2_paths = list(args.fasta_path.glob("*.pdb"))
         pdb_path = args.pdb_path / pdb[1:3] / (pdb[:4] + ".pdb1")
         assert pdb_path.exists(), f"PDB path {pdb_path} does not exist"
-        curr_results = [
-            pdb + f"_{n}", temp
-        ]
+        curr_results = [model, pdb, n, temp]
         for curr_path in all_af2_paths:
             curr_rmsd = calculate_RMSD(curr_path, pdb_path)
             curr_results.append(curr_rmsd)
