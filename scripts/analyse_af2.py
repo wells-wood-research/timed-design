@@ -13,8 +13,8 @@ def calculate_RMSD_and_gdt(pdb_original_path, pdb_predicted_path) -> float:
     pymol.finish_launching()
     cmd = pymol.cmd
     cmd.delete("all")
-    cmd.load(pdb_original_path, object="reference")
-    cmd.load(pdb_predicted_path, object="model")
+    cmd.load(pdb_original_path, object="ref_ori")
+    cmd.load(pdb_predicted_path, object="modelled")
     sel_ref, sel_model = cmd.get_object_list("all")
     # Select only C alphas
     sel_ref += " and name CA"
@@ -89,9 +89,13 @@ def main(args):
                 reference_pdb.sequences[0]
             ), f"Length of reference sequence and current pdb do not match"
             with tempfile.NamedTemporaryFile(
-                mode="w", delete=True
+                mode="w",
+                delete=True,
+                suffix=".pdb",
             ) as reference_pdb_tmp_path, tempfile.NamedTemporaryFile(
-                mode="w", delete=True
+                mode="w",
+                delete=True,
+                suffix=".pdb",
             ) as curr_pdb_tmp_path:
                 # Pre-process with ampal to avoid junk:
                 reference_pdb_tmp_path.write(curr_pdb.pdb)
