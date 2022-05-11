@@ -74,10 +74,14 @@ def main(args):
         # TODO: Add multiprocessing?
         for curr_path in all_af2_paths:
             curr_pdb = ampal.load_pdb(str(curr_path))
+            if isinstance(curr_pdb, ampal.AmpalContainer):
+                curr_pdb = curr_pdb[0]
+            reference_pdb = ampal.load_pdb(str(pdb_path))
+            if isinstance(reference_pdb, ampal.AmpalContainer):
+                reference_pdb = reference_pdb[0]
             assert (
                 curr_pdb.sequences[0] == seq
             ), f"Sequence {fasta_path} at {lines[0]} and curr_pdb {curr_path} do not match."
-            reference_pdb = ampal.load_pdb(str(pdb_path))
             assert (
                 reference_pdb.sequences[0] == seq
             ), f"Reference Sequence {pdb_path} and sequence {fasta_path} do not match."
