@@ -12,8 +12,9 @@ def calculate_RMSD_and_gdt(pdb_original_path, pdb_predicted_path) -> float:
     pymol.pymol_argv = ["pymol", "-qc"]
     pymol.finish_launching()
     cmd = pymol.cmd
+    cmd.undo_disable() # Avoids pymol giving errors with memory
     cmd.delete("all")
-    cmd.load(pdb_original_path, object="ref_ori")
+    cmd.load(pdb_original_path, object="refori")
     cmd.load(pdb_predicted_path, object="modelled")
     sel_ref, sel_model = cmd.get_object_list("all")
     # Select only C alphas
@@ -22,7 +23,6 @@ def calculate_RMSD_and_gdt(pdb_original_path, pdb_predicted_path) -> float:
     rmsd = cmd.align(target=sel_ref, mobile=sel_model)[0]
     cmd.align(target=sel_ref, mobile=sel_model, cycles=0, transform=0, object="aln")
     mapping = cmd.get_raw_alignment("aln")
-
     cutoffs = [1.0, 2.0, 4.0, 8.0]
     distances = []
     for mapping_ in mapping:
@@ -80,7 +80,7 @@ def main(args):
             if isinstance(reference_pdb, ampal.AmpalContainer):
                 reference_pdb = reference_pdb[0]
             assert (
-                curr_pdb.sequences[0] == seq
+                    curr_pdb.sequences[0] == seq
             ), f"Sequence {fasta_path} at {lines[0]} and curr_pdb {curr_path} do not match."
             assert len(reference_pdb.sequences[0]) == len(
                 seq
@@ -89,9 +89,9 @@ def main(args):
                 reference_pdb.sequences[0]
             ), f"Length of reference sequence and current pdb do not match"
             with tempfile.NamedTemporaryFile(
-                mode="w",
-                delete=True,
-                suffix=".pdb",
+                    mode="w",
+                    delete=True,
+                    suffix=".pdb",
             ) as reference_pdb_tmp_path, tempfile.NamedTemporaryFile(
                 mode="w",
                 delete=True,
