@@ -82,14 +82,17 @@ def main(args):
             assert (
                 curr_pdb.sequences[0] == seq
             ), f"Sequence {fasta_path} at {lines[0]} and curr_pdb {curr_path} do not match."
-            assert (
-                len(reference_pdb.sequences[0]) == len(seq)
+            assert len(reference_pdb.sequences[0]) == len(
+                seq
             ), f"Length of Reference Sequence {pdb_path} and sequence {fasta_path} do not match."
             assert len(curr_pdb.sequences[0]) == len(
                 reference_pdb.sequences[0]
             ), f"Length of reference sequence and current pdb do not match"
-
-            with tempfile.NamedTemporaryFile(mode="w") as reference_pdb_tmp_path, tempfile.NamedTemporaryFile(mode="w") as curr_pdb_tmp_path:
+            with tempfile.NamedTemporaryFile(
+                mode="w", delete=True
+            ) as reference_pdb_tmp_path, tempfile.NamedTemporaryFile(
+                mode="w", delete=True
+            ) as curr_pdb_tmp_path:
                 # Pre-process with ampal to avoid junk:
                 reference_pdb_tmp_path.write(curr_pdb.pdb)
                 reference_pdb_tmp_path.seek(0)
@@ -97,12 +100,16 @@ def main(args):
                 curr_pdb_tmp_path.write(reference_pdb.pdb)
                 curr_pdb_tmp_path.seek(0)
                 curr_rmsd, curr_gdt = calculate_RMSD_and_gdt(
-                    reference_pdb_tmp_path, curr_pdb_tmp_path
+                    reference_pdb_tmp_path.name, curr_pdb_tmp_path.name
                 )
                 # curr_rmsd = np.nan
                 # error_log.append((pdb_path, str(curr_path)))
                 curr_results.append(curr_rmsd)
                 curr_results.append(curr_gdt)
+            # os.remove(reference_pdb_tmp_path.name)
+            # os.remove(curr_pdb_tmp_path.name)
+            # os.remove(curr_pdb_tmp_path.name)
+
         all_results.append(curr_results)
     all_results = np.array(all_results)
     np.savetxt("all_results.csv", all_results, delimiter=",", fmt="%s")
