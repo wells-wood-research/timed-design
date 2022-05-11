@@ -83,8 +83,8 @@ def main(args):
                 curr_pdb.sequences[0] == seq
             ), f"Sequence {fasta_path} at {lines[0]} and curr_pdb {curr_path} do not match."
             assert (
-                reference_pdb.sequences[0] == seq
-            ), f"Reference Sequence {pdb_path} and sequence {fasta_path} do not match."
+                len(reference_pdb.sequences[0]) == len(seq)
+            ), f"Length of Reference Sequence {pdb_path} and sequence {fasta_path} do not match."
             assert len(curr_pdb.sequences[0]) == len(
                 reference_pdb.sequences[0]
             ), f"Length of reference sequence and current pdb do not match"
