@@ -26,11 +26,14 @@ def calculate_RMSD_and_gdt(pdb_original_path, pdb_predicted_path) -> float:
     cutoffs = [1.0, 2.0, 4.0, 8.0]
     distances = []
     for mapping_ in mapping:
-        atom1 = f"{mapping_[0][0]} and id {mapping_[0][1]}"
-        atom2 = f"{mapping_[1][0]} and id {mapping_[1][1]}"
-        dist = cmd.get_distance(atom1, atom2)
-        cmd.alter(atom1, f"b = {dist:.4f}")
-        distances.append(dist)
+        try:
+            atom1 = f"{mapping_[0][0]} and id {mapping_[0][1]}"
+            atom2 = f"{mapping_[1][0]} and id {mapping_[1][1]}"
+            dist = cmd.get_distance(atom1, atom2)
+            cmd.alter(atom1, f"b = {dist:.4f}")
+            distances.append(dist)
+        except:
+            continue
     distances = np.asarray(distances)
     gdts = []
     for cutoff in cutoffs:
@@ -110,9 +113,7 @@ def main(args):
                 # error_log.append((pdb_path, str(curr_path)))
                 curr_results.append(curr_rmsd)
                 curr_results.append(curr_gdt)
-            # os.remove(reference_pdb_tmp_path.name)
-            # os.remove(curr_pdb_tmp_path.name)
-            # os.remove(curr_pdb_tmp_path.name)
+
 
         all_results.append(curr_results)
     all_results = np.array(all_results)
