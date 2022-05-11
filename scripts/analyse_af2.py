@@ -89,7 +89,7 @@ def main(args):
                 reference_pdb.sequences[0]
             ), f"Length of reference sequence and current pdb do not match"
 
-            with tempfile.NamedTemporaryFile() as reference_pdb_tmp_path, tempfile.NamedTemporaryFile() as curr_pdb_tmp_path:
+            with tempfile.NamedTemporaryFile(mode="w") as reference_pdb_tmp_path, tempfile.NamedTemporaryFile(mode="w") as curr_pdb_tmp_path:
                 # Pre-process with ampal to avoid junk:
                 reference_pdb_tmp_path.write(curr_pdb.pdb)
                 reference_pdb_tmp_path.seek(0)
