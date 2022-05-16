@@ -81,7 +81,7 @@ def main(args):
     #     First the sequence is packed with SCWRL and saved to PDB,
     #     Then, the same metrics as before are calculated and saved
     pdb_to_scores_rot, _ = analyse_with_scwrl(
-        pdb_to_sequence, pdb_to_assemblies, args.output_path, suffix=f"_{model_name}"
+        pdb_to_sequence, pdb_to_assemblies, args.output_path, suffix=f"_{model_name}", scwrl_path=args.scwrl_path
     )
     model_pdb_codes = np.core.defchararray.add(pdb_codes, f"_{model_name}")
     model_results_dict, _ = tag_pdb_with_rot(
@@ -97,7 +97,7 @@ def main(args):
 
     # - Analysis 3: TIMED_rotamer vs Real sequence from crystal put through SCWRL
     pdb_to_scores_real, _ = analyse_with_scwrl(
-        pdb_to_real_sequence, pdb_to_assemblies, args.output_path, suffix="_scwrl"
+        pdb_to_real_sequence, pdb_to_assemblies, args.output_path, suffix="_scwrl", scwrl_path=args.scwrl_path
     )
     scwrl_pdb_codes = np.core.defchararray.add(pdb_codes, "_scwrl")
     scwrl_results_dict, _ = tag_pdb_with_rot(
@@ -148,6 +148,9 @@ if __name__ == "__main__":
         default=False,
         action="store_true",
         help="Whether model to import from the old datasetmap (default: False)",
+    )
+    parser.add_argument(
+        "--scwrl_path", default="/Users/leo/scwrl4/Scwrl4", type=str, help="Path to Scwrl4 software"
     )
     params = parser.parse_args()
     main(params)

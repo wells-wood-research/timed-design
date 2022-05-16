@@ -86,7 +86,7 @@ def run_scwrl(
         Raised if SCWRL failed to run.
     """
     if path:
-        with open(pdb, "r") as inf:
+        with open(pdb, "rb") as inf:
             pdb = inf.read()
     pdb = pdb.encode()
     sequence = sequence.encode()
@@ -103,7 +103,7 @@ def run_scwrl(
             scwrl_tmp.seek(0)  # Resets the buffer back to the first line
             scwrl_seq.write(sequence)
             scwrl_seq.seek(0)
-            scwrl_command = f"{scwrl_path} -p {scwrl_path}/Scwrl4.ini -i {scwrl_tmp.name} -o {scwrl_out.name} -s {scwrl_seq.name}"
+            scwrl_command = f"{scwrl_path} -p {scwrl_path}.ini -i {scwrl_tmp.name} -o {scwrl_out.name} -s {scwrl_seq.name}"
             if rigid_rotamer_model:
                 scwrl_command += " -v"
             if not hydrogens:

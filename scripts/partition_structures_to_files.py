@@ -24,12 +24,19 @@ def main(args):
                     _, seq, _, _ = line
                     pdb_key = f"{model}_{pdb}_{t}_{i}"
                     output_dict[pdb_key] = seq
-        count = 1
+        file_count = 1
+        # Create output folder if it does not exist:
+        output_path = Path(f"{model}_{file_count}")
+        output_path.mkdir(parents=True, exist_ok=True)
         for i, (pdb, seq) in enumerate(output_dict.items()):
-            if i == count*args.structures_per_file:
-                count += 1
+            # Split when group has enough sequences:
+            if i == file_count*args.structures_per_category:
+                file_count += 1
+                output_path = Path(f"{model}_{file_count}")
+                # Create output folder if it does not exist:
+                output_path.mkdir(parents=True, exist_ok=True)
             # TODO: there are better ways to deal with open files
-            with open(f"{model}_{count}.fasta", "a+") as f:
+            with open(f"{output_path}/{model}_{i}.fasta", "a+") as f:
                 f.write(f">{pdb}\n{seq}\n")
 
 
@@ -66,7 +73,7 @@ if __name__ == "__main__":
         help="Number of pdbs to select (default: 10).",
     )
     parser.add_argument(
-        "--structures_per_file",
+        "--structures_per_category",
         type=int,
         default=80,
         help="Number of structures to output per file (default: 80).",

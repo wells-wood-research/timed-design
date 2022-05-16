@@ -45,18 +45,18 @@ def test_random_choice_prob_index():
 
 
 def test_apply_temp_to_probs():
-    new_probs = apply_temp_to_probs(probs=theoretical_prob, t=1)
+    new_probs = apply_temp_to_probs(probs=np.array(theoretical_prob), t=1)
     assert np.allclose(
         new_probs, theoretical_prob
     ), "Temperature Factor of 1 changed probabilities"
-    new_probs = apply_temp_to_probs(probs=theoretical_prob, t=0.01)
+    new_probs = apply_temp_to_probs(probs=np.array(theoretical_prob), t=0.01)
     assert np.argmax(new_probs) == np.argmax(
         theoretical_prob
     ), "Argmax has changed with lower temperature"
     assert np.isclose(
         new_probs[:, np.argmax(new_probs)], 1.0
     ), "Argmax should have probability close to 1 at t=0.01"
-    new_probs = apply_temp_to_probs(probs=theoretical_prob, t=100)
+    new_probs = apply_temp_to_probs(probs=np.array(theoretical_prob), t=100)
     assert np.allclose(
         np.array([1 / 20] * 20), new_probs, rtol=0.01, atol=0.01
     ), f"At higher temperature factors, probabilities shoudld be close to 0.05 but got {new_probs[0]}"
