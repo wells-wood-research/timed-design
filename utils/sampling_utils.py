@@ -41,7 +41,7 @@ def random_choice_prob_index(
     probs: np.ndarray,
     axis: int = 1,
     return_seq: bool = True,
-    rotamer_categories: t.Optional[np.ndarray, None] = None,
+    rotamer_categories: t.Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
     Samples from a probability distribution and returns a sequence or the indeces sampled.
@@ -81,7 +81,7 @@ def sample_from_sequences(
     pdb: str,
     sample_n: int,
     pdb_to_probability: dict,
-    rotamer_categories: t.Optional[np.ndarray, None],
+    rotamer_categories: t.Optional[np.ndarray],
 ) -> dict:
     """
     Sample from pdb sequences sample_n times.
