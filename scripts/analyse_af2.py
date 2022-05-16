@@ -5,10 +5,11 @@ from pathlib import Path
 import ampal
 import numpy as np
 import pymol
+from sklearn import metrics
 from tqdm import tqdm
 
 
-def calculate_RMSD_and_gdt(pdb_original_path, pdb_predicted_path) -> float:
+def calculate_RMSD_and_gdt(pdb_original_path, pdb_predicted_path) -> (float, float):
     pymol.pymol_argv = ["pymol", "-qc"]
     pymol.finish_launching()
     cmd = pymol.cmd
@@ -43,7 +44,6 @@ def calculate_RMSD_and_gdt(pdb_original_path, pdb_predicted_path) -> float:
     mean_gdt = np.mean(gdts)
     return rmsd, mean_gdt
 
-
 def main(args):
     args.af2_results_path = Path(args.af2_results_path)
     args.fasta_path = Path(args.fasta_path)
@@ -75,13 +75,16 @@ def main(args):
         assert pdb_path.exists(), f"PDB path {pdb_path} does not exist"
         curr_results = [model, pdb, n, temp]
         # TODO: Add multiprocessing?
-        for curr_path in all_af2_paths:
+        for i, curr_path in enumerate(all_af2_paths):
+            # Load af2 pdb structures to sanitise input:
             curr_pdb = ampal.load_pdb(str(curr_path))
             if isinstance(curr_pdb, ampal.AmpalContainer):
                 curr_pdb = curr_pdb[0]
+            # Load reference pdb structures to sanitise input:
             reference_pdb = ampal.load_pdb(str(pdb_path))
             if isinstance(reference_pdb, ampal.AmpalContainer):
                 reference_pdb = reference_pdb[0]
+            # Sanity checks:
             assert (
                     curr_pdb.sequences[0] == seq
             ), f"Sequence {fasta_path} at {lines[0]} and curr_pdb {curr_path} do not match."
@@ -91,6 +94,11 @@ def main(args):
             assert len(curr_pdb.sequences[0]) == len(
                 reference_pdb.sequences[0]
             ), f"Length of reference sequence and current pdb do not match"
+            # Calculate accuracy if first structure:
+            if i == 0:
+                seq_accuracy = metrics.accuracy_score(list(curr_pdb.sequences[0]), reference_pdb.sequences[0])
+                curr_results.append(seq_accuracy)
+            # Required purely to avoid bugs on files being corrupted:
             with tempfile.NamedTemporaryFile(
                     mode="w",
                     delete=True,
@@ -106,16 +114,16 @@ def main(args):
                 # Resets the buffer back to the first line
                 curr_pdb_tmp_path.write(reference_pdb.pdb)
                 curr_pdb_tmp_path.seek(0)
+                # Calculate metrics:
                 curr_rmsd, curr_gdt = calculate_RMSD_and_gdt(
                     reference_pdb_tmp_path.name, curr_pdb_tmp_path.name
                 )
-                # curr_rmsd = np.nan
-                # error_log.append((pdb_path, str(curr_path)))
+                # Append current metrics
                 curr_results.append(curr_rmsd)
                 curr_results.append(curr_gdt)
-
-
+        # Pool all metrics together:
         all_results.append(curr_results)
+    # Load results and save as csv:
     all_results = np.array(all_results)
     np.savetxt("all_results.csv", all_results, delimiter=",", fmt="%s")
     np.savetxt("errors.csv", np.array(error_log), delimiter=",", fmt="%s")
