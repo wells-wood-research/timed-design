@@ -378,6 +378,8 @@ def load_dataset_and_predict(
         flat_dataset_map, training_set_pdbs = create_flat_dataset_map(
             dataset_path, filter_pdb_list
         )
+    old_datasetmap = True if len(flat_dataset_map[0]) == 4 else False
+
     if predict_rotamers:
         codec, flat_categories = get_rotamer_codec()
     else:
@@ -443,7 +445,10 @@ def load_dataset_and_predict(
             pdb_to_consensus,
             pdb_to_consensus_prob,
         ) = extract_sequence_from_pred_matrix(
-            flat_dataset_map, prediction_matrix, rotamers_categories=None
+            flat_dataset_map,
+            prediction_matrix,
+            rotamers_categories=None,
+            old_datasetmap=old_datasetmap,
         )
         save_dict_to_fasta(pdb_to_sequence, model_name)
         save_dict_to_fasta(pdb_to_real_sequence, "dataset")
@@ -588,8 +593,6 @@ def extract_sequence_from_pred_matrix(
             if len(pdb) == 5:
                 pdbchain = pdb
             else:
-                print(len(pdb))
-                print(pdb)
                 pdbchain = pdb + chain
         # Prepare the dictionaries:
         if pdbchain not in pdb_to_sequence:
