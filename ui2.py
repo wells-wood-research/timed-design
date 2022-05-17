@@ -6,18 +6,11 @@ import streamlit as st
 from utils.utils import load_dataset_and_predict
 
 
-def predict_dataset(file, model):
-    with tempfile.NamedTemporaryFile(
-            delete=True
-    ) as dataset_file:
+def predict_dataset(file, path_to_model):
+    with tempfile.NamedTemporaryFile(delete=True) as dataset_file:
         dataset_file.write(file.getbuffer())
         dataset_file.seek(0)  # Resets the buffer back to the first line
         path_to_dataset = Path(dataset_file.name)
-        path_to_model = Path(model.name)
-        st.write(path_to_dataset)
-        st.write(path_to_dataset.exists())
-        st.write(path_to_model)
-        st.write(path_to_model.exists())
         (
             flat_dataset_map,
             pdb_to_sequence,
@@ -34,29 +27,61 @@ def predict_dataset(file, model):
             dataset_map_path="data.txt",
             predict_rotamers=True,
         )
-    st.title("Dataset Map")
-    st.write(flat_dataset_map)
-    st.title("Predicted Sequences")
-    st.write(pdb_to_sequence)
-    st.title("Predicted Probabilities")
-    st.write(pdb_to_probability)
-    st.title("Real Sequences")
-    st.write(pdb_to_real_sequence)
+    return (
+        flat_dataset_map,
+        pdb_to_sequence,
+        pdb_to_probability,
+        pdb_to_real_sequence,
+        pdb_to_consensus,
+        pdb_to_consensus_prob,
+    )
 
 
 def main():
-    st.sidebar.title('Show Proteins')
-    prot_str='1A2C,1BML,1D5M,1D5X,1D5Z,1D6E,1DEE,1E9F,1FC2,1FCC,1G4U,1GZS,1HE1,1HEZ,1HQR,1HXY,1IBX,1JBU,1JWM,1JWS'
-    prot_list=prot_str.split(',')
+    path_to_models = Path("models")
+    st.sidebar.title("Show Proteins")
     dataset = st.sidebar.file_uploader(label="Choose your Dataset")
-    model = st.sidebar.file_uploader(label="Choose your Model")
-
-    result = st.button('Run TIMED')
+    model = st.sidebar.selectbox(
+        label="Choose your Model",
+        options=(
+            "TIMED",
+            "TIMED_Deep",
+            "TIMED_not_so_deep",
+            "TIMED_rotamer",
+            "TIMED_rotamer_deep",
+            "DenseCPD",
+            "DenseNet",
+            "ProDCoNN",
+        ),
+        help="To check the performance of each of the models visit: https://github.com/wells-wood-research/timed-design/releases/tag/model",
+    )
+    model_path = path_to_models / (model + ".h5")
+    placeholder = st.sidebar.empty()
+    result = placeholder.button("Run model", key="1")
     if result:
-        st.write('Calculating results...')
-        predict_dataset(dataset, model)
+        placeholder.button("Run model", disabled=True, key="2")
+        with st.spinner("Calculating results.."):
+            (
+                flat_dataset_map,
+                pdb_to_sequence,
+                pdb_to_probability,
+                pdb_to_real_sequence,
+                pdb_to_consensus,
+                pdb_to_consensus_prob,
+            ) = predict_dataset(dataset, model_path)
+        st.success("Done!")
+        st.title("Dataset Map")
+        st.write(flat_dataset_map)
+        st.title("Predicted Sequences")
+        st.write(pdb_to_sequence)
+        st.title("Predicted Probabilities")
+        st.write(pdb_to_probability)
+        st.title("Real Sequences")
+        st.write(pdb_to_real_sequence)
+        placeholder.button("Run model", disabled=False, key="3")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
 
 # style = st.sidebar.selectbox('style',['line','cross','stick','sphere','cartoon','clicksphere'])
