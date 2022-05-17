@@ -1,3 +1,4 @@
+import tempfile
 from pathlib import Path
 
 import streamlit as st
@@ -6,24 +7,33 @@ from utils.utils import load_dataset_and_predict
 
 
 def predict_dataset(file, model):
-    path_to_dataset = Path(file.name)
-    path_to_model = Path(model.name)
-    (
-        flat_dataset_map,
-        pdb_to_sequence,
-        pdb_to_probability,
-        pdb_to_real_sequence,
-        pdb_to_consensus,
-        pdb_to_consensus_prob,
-    ) = load_dataset_and_predict(
-        [path_to_model],
-        path_to_dataset,
-        batch_size=12,
-        start_batch=0,
-        blacklist=None,
-        dataset_map_path="dataset.txt",
-        predict_rotamers=True,
-    )
+    with tempfile.NamedTemporaryFile(
+            delete=True
+    ) as dataset_file:
+        dataset_file.write(file.getbuffer())
+        dataset_file.seek(0)  # Resets the buffer back to the first line
+        path_to_dataset = Path(dataset_file.name)
+        path_to_model = Path(model.name)
+        st.write(path_to_dataset)
+        st.write(path_to_dataset.exists())
+        st.write(path_to_model)
+        st.write(path_to_model.exists())
+        (
+            flat_dataset_map,
+            pdb_to_sequence,
+            pdb_to_probability,
+            pdb_to_real_sequence,
+            pdb_to_consensus,
+            pdb_to_consensus_prob,
+        ) = load_dataset_and_predict(
+            [path_to_model],
+            path_to_dataset,
+            batch_size=12,
+            start_batch=0,
+            blacklist=None,
+            dataset_map_path="data.txt",
+            predict_rotamers=True,
+        )
     st.title("Dataset Map")
     st.write(flat_dataset_map)
     st.title("Predicted Sequences")
