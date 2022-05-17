@@ -395,6 +395,8 @@ def load_dataset_and_predict(
             model_name = str(m)
         # Import Model:
         frame_model = tf.keras.models.load_model(Path(m))
+        # Create output file for model:
+        model_out = f"{model_name}" + "_rot.csv" if predict_rotamers else f"{model_name}" + ".csv"
         # Load batch:
         for index in tqdm(
             range(start_batch, n_batches),
@@ -416,7 +418,7 @@ def load_dataset_and_predict(
             y_pred_batch = frame_model.predict(X_batch)
             if predict_rotamers:
                 # Output model predictions:
-                with open(f"{model_name}_rot.csv", "a") as f:
+                with open(model_out, "a") as f:
                     np.savetxt(f, y_pred_batch, delimiter=",")
                 current_batch = np.argmax(y_pred_batch, axis=1)
                 y_pred_batch = np.array([codec[c] for c in current_batch])
@@ -435,7 +437,7 @@ def load_dataset_and_predict(
         convert_dataset_map_for_srb(flat_dataset_map, model_name)
         # Load prediction matrix
         prediction_matrix = genfromtxt(
-            f"{model_name}.csv", delimiter=",", dtype=np.float16
+            model_out, delimiter=",", dtype=np.float16
         )
         # Save as Fasta file:
         (
@@ -447,7 +449,7 @@ def load_dataset_and_predict(
         ) = extract_sequence_from_pred_matrix(
             flat_dataset_map,
             prediction_matrix,
-            rotamers_categories=None,
+            rotamers_categories=flat_categories if predict_rotamers else None,
             old_datasetmap=old_datasetmap,
         )
         save_dict_to_fasta(pdb_to_sequence, model_name)
@@ -570,7 +572,7 @@ def extract_sequence_from_pred_matrix(
     is_consensus = False
     res_to_r_dic = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
     if rotamers_categories:
-        res_dic = rotamers_categories
+        res_dic = [res_to_r_dic[res.split("_")[0]] for res in rotamers_categories]
     else:
         res_dic = list(standard_amino_acids.keys())
     # Extract max idx for prediction matrix:
