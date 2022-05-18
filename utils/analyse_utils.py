@@ -283,7 +283,7 @@ def create_rot_cm(
         )
 
 
-def calculate_metrics_(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
+def calculate_metrics(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
     y_pred = []
     y_true = []
     one_hot_encode = np.zeros((len(standard_amino_acids), len(standard_amino_acids)))
@@ -307,9 +307,6 @@ def calculate_metrics_(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
     y_true = np.array(y_true)
     y_pred_argmax = np.argmax(y_pred, axis=1)
     y_true_argmax = np.argmax(y_true, axis=1)
-    print(y_pred.shape)
-    print(y_pred_argmax)
-    print(y_true_argmax)
     # Calculate metrics:
     auc_ovo = roc_auc_score(
         y_true,
@@ -365,13 +362,8 @@ def calculate_metrics_(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
             bias[flat_categories[int(y)]] = b
         else:
             bias[flat_categories[int(y)]] = np.nan
-
-    # mix = np.unique(np.append(y_true_argmax, y_pred_argmax))
-    # print(mix)
-    # labels = [flat_categories[l] for l in mix]
-    # print(labels)
     unweighted_cm = confusion_matrix(
-        y_true_argmax, y_pred_argmax, normalize="all"#, labels=labels
+        y_true_argmax, y_pred_argmax, normalize="all"
     )
 
     return {
