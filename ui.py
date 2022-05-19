@@ -1,4 +1,5 @@
 import tempfile
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -89,13 +90,18 @@ def main():
             :datum.label == 18 ? '{res[18]}'
             : '{res[19]}'
             """
+
     if result:
+        # When user clicks on calculate, check that the model is a rotamer model or not:
         rotamer_mode = True if "rotamer" in model else False
         if rotamer_mode:
             _, flat_categories = get_rotamer_codec()
         else:
             flat_categories = standard_amino_acids.values()
+        # Disable Run Model button while running the app: (avoids clogging)
         placeholder.button("Run model", disabled=True, key="2")
+        # Use model to predict:
+        t0 = time.time()
         with st.spinner("Calculating results.."):
             (
                 flat_dataset_map,
@@ -105,21 +111,33 @@ def main():
                 _,
                 _,
             ) = predict_dataset(dataset, model_path, rotamer_mode)
-        st.success("Done!")
+        t1 = time.time()
+        time_string = time.strftime("%M m %S s", time.gmtime(t1-t0))
+        st.success(f"Done! Prediction took {time_string}")
+    # # Build string datasetmap for selection
+    # f_1 = np.core.defchararray.add(flat_dataset_map[:, 2], " Chain ")
+    # f_2 = np.core.defchararray.add(f_1, flat_dataset_map[:, 1])
+    # f_3 = np.core.defchararray.add(f_2, " ")
+    # f_4 = np.core.defchararray.add(f_3, flat_dataset_map[:, 3])
+    # datamap_to_idx = dict(zip(f_4, range(len(f_4))))
+    # Print Results:
         st.title("Model Output")
+        # For each key in the dataset:
         for k in pdb_to_probability.keys():
             st.subheader(k)
+            # Show predicted sequence:
             st.write("Designed Sequence")
             st.code(pdb_to_sequence[k])
-            comp_design = Counter(list(pdb_to_sequence[k]))
-            comp_real = Counter(list(pdb_to_real_sequence[k]))
+            # Calculate Seq Metrics:
             real_metrics = calculate_seq_metrics(pdb_to_real_sequence[k])
             predicted_metrics = calculate_seq_metrics(pdb_to_sequence[k])
+            # Display original Metrics:
             st.write("Original Sequence Metrics")
             col1, col2, col3 = st.columns(3)
             col1.metric("Charge", f"{millify(real_metrics[0], precision=2)}")
             col2.metric("Isoelectric Point", f"{millify(real_metrics[1], precision=2)}")
             col3.metric("Molecular Weight", f"{millify(real_metrics[2], precision=2)}")
+            # Display Predicted Metrics:
             st.write("Predicted Sequence Metrics")
             col1, col2, col3 = st.columns(3)
             col1.metric(
@@ -141,6 +159,9 @@ def main():
                 list(pdb_to_real_sequence[k]), list(pdb_to_sequence[k])
             )
             st.metric("Sequence Identity", f"{millify(acc*100, precision=2)} %")
+            # Calculate composition of Sequence:
+            comp_design = Counter(list(pdb_to_sequence[k]))
+            comp_real = Counter(list(pdb_to_real_sequence[k]))
             new_comp = []
             for c_key, c_value in comp_real.items():
                 current_value = ["Original", standard_amino_acids[c_key], c_value]
@@ -148,6 +169,7 @@ def main():
             for c_key, c_value in comp_design.items():
                 current_value = ["Designed", standard_amino_acids[c_key], c_value]
                 new_comp.append(current_value)
+            # Merge into Dataframe to allow for easy display with Altair:
             df = pd.DataFrame(new_comp, columns=["Source", "Residue", "# Qty"])
             chart = (
                 alt.Chart(df)
@@ -168,8 +190,7 @@ def main():
                 )
                 .configure_view(stroke=None, strokeWidth=0.0)
             )
-            st.write("Residue Composition")
-            st.altair_chart(chart, use_container_width=False)
+            # Show predicted probabilities:
             st.write("Predicted Probabilities")
             x, y = np.meshgrid(
                 list(flat_categories), range(0, len(pdb_to_probability[k]))
@@ -181,7 +202,7 @@ def main():
                     "Probability (%)": np.array(pdb_to_probability[k]).ravel() * 100,
                 }
             )
-
+            # Rotamer Matrix is very large so it is hidden under a "spoiler" dropdown menu
             if rotamer_mode:
                 rot_labels = ""
                 for i, cat in enumerate(flat_categories):
@@ -204,6 +225,8 @@ def main():
                         tooltip=["Probability (%)", "Residues", "Position"],
                     )
                 )
+                with st.expander("See Predicted Probabilities (Very Large Chart)"):
+                    st.altair_chart(cm, use_container_width=False)
             else:
                 cm = (
                     alt.Chart(source)
@@ -217,64 +240,68 @@ def main():
                         ),
                     )
                 )
-            if rotamer_mode:
-                with st.expander("See Predicted Probabilities (Very Large Chart)"):
-                    st.altair_chart(cm, use_container_width=False)
-            else:
                 st.altair_chart(cm, use_container_width=False)
-        st.title("Overall Performance Metrics")
-        results_dict = calculate_metrics(pdb_to_sequence, pdb_to_real_sequence)
-        st.subheader("Descriptive Metrics")
-        cols = st.columns(4)
-        for i, c in enumerate(cols):
-            acc_label = f"accuracy_{i+2}"
-            acc = results_dict[acc_label]
-            c.metric(f"Top {i+2} Accuracy", f"{millify(acc*100, precision=2)} %")
-        col1, col2, col3, _ = st.columns(4)
-        col1.metric(
-            f"Macro Precision",
-            f"{millify(results_dict['precision'] * 100, precision=2)} %",
-        )
-        col2.metric(
-            f"Macro Recall", f"{millify(results_dict['recall'] * 100, precision=2)} %"
-        )
-        col3.metric(
-            f"AUC OVO", f"{millify(results_dict['auc_ovo'] * 100, precision=2)} %"
-        )
-        df = pd.DataFrame.from_dict(results_dict["report"])
-        df.drop(["accuracy", "macro avg", "weighted avg"], axis=1, inplace=True)
-        df.drop(["support"], axis=0, inplace=True)
-        df.columns = res
-        st.bar_chart(df.T)
-        st.subheader("Prediction Bias")
-        vals = list(results_dict["bias"].values())
-        df = pd.DataFrame(vals)
-        df.fillna(0, inplace=True)
-        df.index = res
-        st.bar_chart(df)
-        length_cm = len(results_dict["unweighted_cm"])
-        x, y = np.meshgrid(range(0, length_cm), range(0, length_cm))
-        z = results_dict["unweighted_cm"]
-        # Convert this grid to columnar data expected by Altair
-        source = pd.DataFrame(
-            {
-                "Predicted Residue": x.ravel(),
-                "True Residue": y.ravel(),
-                "Percentage (%)": z.ravel() * 100,
-            }
-        )
-        cm = (
-            alt.Chart(source)
-            .mark_rect()
-            .encode(
-                x=alt.X("Predicted Residue:O", axis=alt.Axis(labelExpr=axis_labels)),
-                y=alt.Y("True Residue:O", axis=alt.Axis(labelExpr=axis_labels)),
-                color="Percentage (%):Q",
-                tooltip=["Percentage (%)"],
+            # Plot Residue Composition:
+            st.write("Residue Composition")
+            st.altair_chart(chart, use_container_width=False)
+            # Plot Performance Metrics:
+            st.title("Overall Performance Metrics")
+            results_dict = calculate_metrics(pdb_to_sequence, pdb_to_real_sequence)
+            st.subheader("Descriptive Metrics")
+            cols = st.columns(4)
+            # Display Accuracy:
+            for i, c in enumerate(cols):
+                acc_label = f"accuracy_{i+2}"
+                acc = results_dict[acc_label]
+                c.metric(f"Top {i+2} Accuracy", f"{millify(acc*100, precision=2)} %")
+            col1, col2, col3, _ = st.columns(4)
+            col1.metric(
+                f"Macro Precision",
+                f"{millify(results_dict['precision'] * 100, precision=2)} %",
             )
-        )
-        st.subheader("Confusion Matrix")
-        st.altair_chart(cm, use_container_width=True)
+            col2.metric(
+                f"Macro Recall", f"{millify(results_dict['recall'] * 100, precision=2)} %"
+            )
+            col3.metric(
+                f"AUC OVO", f"{millify(results_dict['auc_ovo'] * 100, precision=2)} %"
+            )
+            # Plot Precision, Recall and F1:
+            df = pd.DataFrame.from_dict(results_dict["report"])
+            df.drop(["accuracy", "macro avg", "weighted avg"], axis=1, inplace=True)
+            df.drop(["support"], axis=0, inplace=True)
+            df.columns = res
+            st.bar_chart(df.T)
+            # Plot Bias:
+            st.subheader("Prediction Bias")
+            vals = list(results_dict["bias"].values())
+            df = pd.DataFrame(vals)
+            df.fillna(0, inplace=True)
+            df.index = res
+            st.bar_chart(df)
+            # Plot Confusion matrix:
+            length_cm = len(results_dict["unweighted_cm"])
+            x, y = np.meshgrid(range(0, length_cm), range(0, length_cm))
+            z = results_dict["unweighted_cm"]
+            # Convert this grid to columnar data expected by Altair
+            source = pd.DataFrame(
+                {
+                    "Predicted Residue": x.ravel(),
+                    "True Residue": y.ravel(),
+                    "Percentage (%)": z.ravel() * 100,
+                }
+            )
+            cm = (
+                alt.Chart(source)
+                .mark_rect()
+                .encode(
+                    x=alt.X("Predicted Residue:O", axis=alt.Axis(labelExpr=axis_labels)),
+                    y=alt.Y("True Residue:O", axis=alt.Axis(labelExpr=axis_labels)),
+                    color="Percentage (%):Q",
+                    tooltip=["Percentage (%)"],
+                )
+            )
+            st.subheader("Confusion Matrix")
+            st.altair_chart(cm, use_container_width=True)
         placeholder.button("Run model", disabled=False, key="3")
 
 
