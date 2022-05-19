@@ -14,28 +14,29 @@ from sklearn.metrics import accuracy_score
 from utils.analyse_utils import calculate_metrics, calculate_seq_metrics
 from utils.utils import get_rotamer_codec, load_dataset_and_predict
 
-
+@st.cache(show_spinner=False)
 def predict_dataset(file, path_to_model, rotamer_mode):
-    with tempfile.NamedTemporaryFile(delete=True) as dataset_file:
-        dataset_file.write(file.getbuffer())
-        dataset_file.seek(0)  # Resets the buffer back to the first line
-        path_to_dataset = Path(dataset_file.name)
-        (
-            flat_dataset_map,
-            pdb_to_sequence,
-            pdb_to_probability,
-            pdb_to_real_sequence,
-            pdb_to_consensus,
-            pdb_to_consensus_prob,
-        ) = load_dataset_and_predict(
-            [path_to_model],
-            path_to_dataset,
-            batch_size=12,
-            start_batch=0,
-            blacklist=None,
-            dataset_map_path="data.txt",
-            predict_rotamers=rotamer_mode,
-        )
+    with st.spinner("Calculating results.."):
+        with tempfile.NamedTemporaryFile(delete=True) as dataset_file:
+            dataset_file.write(file.getbuffer())
+            dataset_file.seek(0)  # Resets the buffer back to the first line
+            path_to_dataset = Path(dataset_file.name)
+            (
+                flat_dataset_map,
+                pdb_to_sequence,
+                pdb_to_probability,
+                pdb_to_real_sequence,
+                pdb_to_consensus,
+                pdb_to_consensus_prob,
+            ) = load_dataset_and_predict(
+                [path_to_model],
+                path_to_dataset,
+                batch_size=12,
+                start_batch=0,
+                blacklist=None,
+                dataset_map_path="data.txt",
+                predict_rotamers=rotamer_mode,
+            )
     return (
         flat_dataset_map,
         pdb_to_sequence,
@@ -45,8 +46,20 @@ def predict_dataset(file, path_to_model, rotamer_mode):
         pdb_to_consensus_prob,
     )
 
+@st.cache(show_spinner=False)
+def _calculate_seq_metrics_wrapper(seq: str):
+    return calculate_seq_metrics(seq)
 
-def main():
+@st.cache(show_spinner=False)
+def _calculate_metrics_wrapper(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
+    return calculate_metrics(pdb_to_sequence, pdb_to_real_sequence)
+
+# def plot_prediction_at_residue():
+#     st.write(st.session_state.option)
+    # return calculate_metrics(pdb_to_sequence, pdb_to_real_sequence)
+
+
+if __name__ == '__main__':
     path_to_models = Path("models")
     st.sidebar.title("Design Proteins")
     dataset = st.sidebar.file_uploader(label="Choose your PDB of interest")
@@ -91,7 +104,7 @@ def main():
             : '{res[19]}'
             """
 
-    if result:
+    if result or "reload" in st.session_state.keys():
         # When user clicks on calculate, check that the model is a rotamer model or not:
         rotamer_mode = True if "rotamer" in model else False
         if rotamer_mode:
@@ -102,25 +115,19 @@ def main():
         placeholder.button("Run model", disabled=True, key="2")
         # Use model to predict:
         t0 = time.time()
-        with st.spinner("Calculating results.."):
-            (
-                flat_dataset_map,
-                pdb_to_sequence,
-                pdb_to_probability,
-                pdb_to_real_sequence,
-                _,
-                _,
-            ) = predict_dataset(dataset, model_path, rotamer_mode)
+        (
+            flat_dataset_map,
+            pdb_to_sequence,
+            pdb_to_probability,
+            pdb_to_real_sequence,
+            _,
+            _,
+        ) = predict_dataset(dataset, model_path, rotamer_mode)
         t1 = time.time()
         time_string = time.strftime("%M m %S s", time.gmtime(t1-t0))
-        st.success(f"Done! Prediction took {time_string}")
-    # # Build string datasetmap for selection
-    # f_1 = np.core.defchararray.add(flat_dataset_map[:, 2], " Chain ")
-    # f_2 = np.core.defchararray.add(f_1, flat_dataset_map[:, 1])
-    # f_3 = np.core.defchararray.add(f_2, " ")
-    # f_4 = np.core.defchararray.add(f_3, flat_dataset_map[:, 3])
-    # datamap_to_idx = dict(zip(f_4, range(len(f_4))))
-    # Print Results:
+        if "count" not in st.session_state.keys():
+            st.success(f"Done! Prediction took {time_string}")
+        # Print Results:
         st.title("Model Output")
         # For each key in the dataset:
         for k in pdb_to_probability.keys():
@@ -129,8 +136,8 @@ def main():
             st.write("Designed Sequence")
             st.code(pdb_to_sequence[k])
             # Calculate Seq Metrics:
-            real_metrics = calculate_seq_metrics(pdb_to_real_sequence[k])
-            predicted_metrics = calculate_seq_metrics(pdb_to_sequence[k])
+            real_metrics = _calculate_seq_metrics_wrapper(pdb_to_real_sequence[k])
+            predicted_metrics = _calculate_seq_metrics_wrapper(pdb_to_sequence[k])
             # Display original Metrics:
             st.write("Original Sequence Metrics")
             col1, col2, col3 = st.columns(3)
@@ -171,7 +178,7 @@ def main():
                 new_comp.append(current_value)
             # Merge into Dataframe to allow for easy display with Altair:
             df = pd.DataFrame(new_comp, columns=["Source", "Residue", "# Qty"])
-            chart = (
+            chart_residue_comp = (
                 alt.Chart(df)
                 .mark_bar()
                 .encode(
@@ -241,12 +248,31 @@ def main():
                     )
                 )
                 st.altair_chart(cm, use_container_width=False)
+
+            # TODO: Code below does not work for multiple protein datasets. Select flat_dataset_map by pdb key first
+            # Build string datasetmap for selection
+            f_1 = np.core.defchararray.add(flat_dataset_map[:, 2], " Chain ")
+            f_2 = np.core.defchararray.add(f_1, flat_dataset_map[:, 1])
+            f_3 = np.core.defchararray.add(f_2, " ")
+            f_4 = np.core.defchararray.add(f_3, flat_dataset_map[:, 3])
+            datamap_to_idx = dict(zip(f_4, range(len(f_4))))
+            option = st.selectbox(
+                'Explore probabilities at specific positions:',
+                (f_4), key="option")
+            if "reload" in st.session_state.keys():
+                idx_pos = datamap_to_idx[st.session_state.option]
+                vals = pdb_to_probability[k][idx_pos]
+                df = pd.DataFrame(vals)
+                df.fillna(0, inplace=True)
+                df.index = flat_categories
+                st.bar_chart(df, use_container_width=False)
+
             # Plot Residue Composition:
             st.write("Residue Composition")
-            st.altair_chart(chart, use_container_width=False)
+            st.altair_chart(chart_residue_comp, use_container_width=False)
             # Plot Performance Metrics:
             st.title("Overall Performance Metrics")
-            results_dict = calculate_metrics(pdb_to_sequence, pdb_to_real_sequence)
+            results_dict = _calculate_metrics_wrapper(pdb_to_sequence, pdb_to_real_sequence)
             st.subheader("Descriptive Metrics")
             cols = st.columns(4)
             # Display Accuracy:
@@ -303,13 +329,12 @@ def main():
             st.subheader("Confusion Matrix")
             st.altair_chart(cm, use_container_width=True)
         placeholder.button("Run model", disabled=False, key="3")
+        # Only show specific plots after interaction wiith the interface
+        if 'reload' not in st.session_state:
+            st.session_state.reload = True
 
-
-if __name__ == "__main__":
-    main()
-
-# style = st.sidebar.selectbox('style',['line','cross','stick','sphere','cartoon','clicksphere'])
-# xyzview = py3Dmol.view(query='pdb:'+protein)
-# xyzview.setStyle({style:{'color':'spectrum'}})
-# xyzview.setBackgroundColor(bcolor)
-# showmol(xyzview, height = 500,width=800)
+    # style = st.sidebar.selectbox('style',['line','cross','stick','sphere','cartoon','clicksphere'])
+    # xyzview = py3Dmol.view(query='pdb:'+protein)
+    # xyzview.setStyle({style:{'color':'spectrum'}})
+    # xyzview.setBackgroundColor(bcolor)
+    # showmol(xyzview, height = 500,width=800)
