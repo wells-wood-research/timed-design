@@ -1,5 +1,6 @@
 import tempfile
 import time
+import typing as t
 from collections import Counter
 from pathlib import Path
 
@@ -49,24 +50,49 @@ def predict_dataset(file, path_to_model, rotamer_mode):
         pdb_to_consensus_prob,
     )
 
+
 @st.cache(show_spinner=False)
 def _calculate_seq_metrics_wrapper(seq: str):
     return calculate_seq_metrics(seq)
+
 
 @st.cache(show_spinner=False)
 def _calculate_metrics_wrapper(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
     return calculate_metrics(pdb_to_sequence, pdb_to_real_sequence)
 
-@st.cache(show_spinner=False, allow_output_mutation=True) # Output mutation necessary as object changes as it is interacted with
-def show_pdb(pdb_code):
-    xyzview = py3Dmol.view(query='pdb:' + pdb_code)
-    xyzview.setStyle({"cartoon": {'color': 'spectrum'}})
+
+@st.cache(
+    show_spinner=False, allow_output_mutation=True
+)  # Output mutation necessary as object changes as it is interacted with
+def show_pdb(pdb_code, label_res: t.Optional[str] = None):
+    xyzview = py3Dmol.view(query="pdb:" + pdb_code)
+    xyzview.setStyle({"cartoon": {"color": "spectrum"}})
     xyzview.setBackgroundColor("#FFFFFF")
-    xyzview.spin(True)
+    # loop_resid_dict = {sw1_name: sw1_resids, sw2_name: sw2_resids}
+    if label_res:
+        xyzview.setStyle({"cartoon": {"color": "white", "opacity": 0.5}})
+        resn, _, chain, _ = label_res.split(" ")
+        resn= int(resn)
+        zoom_residue = [
+            { "resi": int(resn)},
+            {
+                "backgroundColor": "lightgray",
+                "fontColor": "black",
+                "backgroundOpacity": 0.5,
+            },
+            {"stick": {"colorscheme": "default", "radius": 0.2}}
+        ]
+        xyzview.addResLabels(zoom_residue[0], zoom_residue[1])
+        xyzview.addStyle(zoom_residue[0], zoom_residue[2])
+        xyzview.addStyle({"resi": f"{(resn-5)}-{resn+5}"}, {"cartoon": {"color": "orange", "opacity": 0.75}})
+        xyzview.zoomTo(zoom_residue[0])
+    else:
+        xyzview.spin(True)
+    # xyzview.zoomTo({ "resi": 90})
     return xyzview
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     path_to_models = Path("models")
     st.sidebar.title("Design Proteins")
     dataset = st.sidebar.file_uploader(label="Choose your PDB of interest")
@@ -131,7 +157,7 @@ if __name__ == '__main__':
             _,
         ) = predict_dataset(dataset, model_path, rotamer_mode)
         t1 = time.time()
-        time_string = time.strftime("%M m %S s", time.gmtime(t1-t0))
+        time_string = time.strftime("%M m %S s", time.gmtime(t1 - t0))
         if "count" not in st.session_state.keys():
             st.success(f"Done! Prediction took {time_string}")
         # Print Results:
@@ -141,11 +167,11 @@ if __name__ == '__main__':
             st.subheader(k)
             try:
                 pdb_session = show_pdb(k[:4])
-                showmol(pdb_session, height=500, width=500)
+                showmol(pdb_session, height=500, width=640)
             except:
                 pass
             # Show predicted sequence:
-            st.write("Designed Sequence")
+            st.subheader("Designed Sequence")
             st.code(pdb_to_sequence[k])
             # Calculate Seq Metrics:
             real_metrics = _calculate_seq_metrics_wrapper(pdb_to_real_sequence[k])
@@ -156,7 +182,9 @@ if __name__ == '__main__':
             col1.metric("Charge", f"{millify(real_metrics[0], precision=2)}")
             col2.metric("Isoelectric Point", f"{millify(real_metrics[1], precision=2)}")
             col3.metric("Molecular Weight", f"{millify(real_metrics[2], precision=2)}")
-            col4.metric("Mol. Ext. Coeff. @ 280 nm", f"{millify(real_metrics[3], precision=2)}")
+            col4.metric(
+                "Mol. Ext. Coeff. @ 280 nm", f"{millify(real_metrics[3], precision=2)}"
+            )
             # Display Predicted Metrics:
             st.write("Predicted Sequence Metrics")
             col1, col2, col3, col4 = st.columns(4)
@@ -275,9 +303,11 @@ if __name__ == '__main__':
             f_4 = np.core.defchararray.add(f_3, flat_dataset_map[:, 3])
             datamap_to_idx = dict(zip(f_4, range(len(f_4))))
             option = st.selectbox(
-                'Explore probabilities at specific positions:',
-                (f_4), key="option")
+                "Explore probabilities at specific positions:", (f_4), key="option"
+            )
             if "reload" in st.session_state.keys():
+                pdb_session2 = show_pdb(k[:4], st.session_state.option)
+                showmol(pdb_session2, height=500, width=500)
                 idx_pos = datamap_to_idx[st.session_state.option]
                 vals = pdb_to_probability[k][idx_pos]
                 df = pd.DataFrame(vals)
@@ -290,7 +320,9 @@ if __name__ == '__main__':
             st.altair_chart(chart_residue_comp, use_container_width=False)
             # Plot Performance Metrics:
             st.title("Overall Performance Metrics")
-            results_dict = _calculate_metrics_wrapper(pdb_to_sequence, pdb_to_real_sequence)
+            results_dict = _calculate_metrics_wrapper(
+                pdb_to_sequence, pdb_to_real_sequence
+            )
             st.subheader("Descriptive Metrics")
             cols = st.columns(4)
             # Display Accuracy:
@@ -304,7 +336,8 @@ if __name__ == '__main__':
                 f"{millify(results_dict['precision'] * 100, precision=2)} %",
             )
             col2.metric(
-                f"Macro Recall", f"{millify(results_dict['recall'] * 100, precision=2)} %"
+                f"Macro Recall",
+                f"{millify(results_dict['recall'] * 100, precision=2)} %",
             )
             col3.metric(
                 f"AUC OVO", f"{millify(results_dict['auc_ovo'] * 100, precision=2)} %"
@@ -338,7 +371,9 @@ if __name__ == '__main__':
                 alt.Chart(source)
                 .mark_rect()
                 .encode(
-                    x=alt.X("Predicted Residue:O", axis=alt.Axis(labelExpr=axis_labels)),
+                    x=alt.X(
+                        "Predicted Residue:O", axis=alt.Axis(labelExpr=axis_labels)
+                    ),
                     y=alt.Y("True Residue:O", axis=alt.Axis(labelExpr=axis_labels)),
                     color="Percentage (%):Q",
                     tooltip=["Percentage (%)"],
@@ -348,5 +383,5 @@ if __name__ == '__main__':
             st.altair_chart(cm, use_container_width=True)
         placeholder.button("Run model", disabled=False, key="3")
         # Only show specific plots after interaction wiith the interface
-        if 'reload' not in st.session_state:
+        if "reload" not in st.session_state:
             st.session_state.reload = True
