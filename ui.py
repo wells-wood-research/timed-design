@@ -124,7 +124,7 @@ if __name__ == "__main__":
     model_path = path_to_models / (model + ".h5")
     placeholder = st.sidebar.empty()
     result = placeholder.button("Run model", key="1")
-    st.sidebar.markdown("[Send me your feedback]()")
+    st.sidebar.markdown("[Tell us what you think!](https://forms.office.com/Pages/ResponsePage.aspx?id=sAafLmkWiUWHiRCgaTTcYY_RqhHaishKsB4CsyQgPCxUOU9DQjhJU0s1QjZVVTNPU0xDVzlFTEhNMS4u)")
 
     res = list(standard_amino_acids.values())
     axis_labels = f"""
