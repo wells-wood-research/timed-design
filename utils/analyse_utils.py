@@ -10,11 +10,8 @@ import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
-from ampal.analyse_protein import (
-    sequence_charge,
-    sequence_isoelectric_point,
-    sequence_molecular_weight,
-)
+from ampal.analyse_protein import (sequence_charge, sequence_isoelectric_point, sequence_molar_extinction_280,
+                                   sequence_molecular_weight)
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -31,7 +28,7 @@ from utils.scwrl_utils import pack_side_chains_scwrl
 from utils.utils import get_rotamer_codec
 
 
-def calculate_seq_metrics(seq: str) -> t.Tuple[float, float, float]:
+def calculate_seq_metrics(seq: str) -> t.Tuple[float, float, float, float]:
     """
     Calculates sequence metrics.
 
@@ -44,13 +41,14 @@ def calculate_seq_metrics(seq: str) -> t.Tuple[float, float, float]:
 
     Returns
     -------
-    metrics: t.Tuple[float, float, float]
-        (charge , iso_ph, mw)
+    metrics: t.Tuple[float, float, float, float]
+        (charge , iso_ph, mw, me)
     """
     charge = sequence_charge(seq)
     iso_ph = sequence_isoelectric_point(seq)
     mw = sequence_molecular_weight(seq)
-    return charge, iso_ph, mw
+    me = sequence_molar_extinction_280(seq)
+    return charge, iso_ph, mw, me
 
 
 def save_assembly_to_path(structure: ampal.Assembly, output_dir: Path, name: str):

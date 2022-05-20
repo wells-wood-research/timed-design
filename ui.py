@@ -6,13 +6,16 @@ from pathlib import Path
 import altair as alt
 import numpy as np
 import pandas as pd
+import py3Dmol
 import streamlit as st
 from ampal.amino_acids import standard_amino_acids
 from millify import millify
 from sklearn.metrics import accuracy_score
+from stmol import showmol
 
 from utils.analyse_utils import calculate_metrics, calculate_seq_metrics
 from utils.utils import get_rotamer_codec, load_dataset_and_predict
+
 
 @st.cache(show_spinner=False)
 def predict_dataset(file, path_to_model, rotamer_mode):
@@ -54,9 +57,13 @@ def _calculate_seq_metrics_wrapper(seq: str):
 def _calculate_metrics_wrapper(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
     return calculate_metrics(pdb_to_sequence, pdb_to_real_sequence)
 
-# def plot_prediction_at_residue():
-#     st.write(st.session_state.option)
-    # return calculate_metrics(pdb_to_sequence, pdb_to_real_sequence)
+@st.cache(show_spinner=False, allow_output_mutation=True) # Output mutation necessary as object changes as it is interacted with
+def show_pdb(pdb_code):
+    xyzview = py3Dmol.view(query='pdb:' + pdb_code)
+    xyzview.setStyle({"cartoon": {'color': 'spectrum'}})
+    xyzview.setBackgroundColor("#FFFFFF")
+    xyzview.spin(True)
+    return xyzview
 
 
 if __name__ == '__main__':
@@ -132,6 +139,11 @@ if __name__ == '__main__':
         # For each key in the dataset:
         for k in pdb_to_probability.keys():
             st.subheader(k)
+            try:
+                pdb_session = show_pdb(k[:4])
+                showmol(pdb_session, height=500, width=500)
+            except:
+                pass
             # Show predicted sequence:
             st.write("Designed Sequence")
             st.code(pdb_to_sequence[k])
@@ -140,13 +152,14 @@ if __name__ == '__main__':
             predicted_metrics = _calculate_seq_metrics_wrapper(pdb_to_sequence[k])
             # Display original Metrics:
             st.write("Original Sequence Metrics")
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             col1.metric("Charge", f"{millify(real_metrics[0], precision=2)}")
             col2.metric("Isoelectric Point", f"{millify(real_metrics[1], precision=2)}")
             col3.metric("Molecular Weight", f"{millify(real_metrics[2], precision=2)}")
+            col4.metric("Mol. Ext. Coeff. @ 280 nm", f"{millify(real_metrics[3], precision=2)}")
             # Display Predicted Metrics:
             st.write("Predicted Sequence Metrics")
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             col1.metric(
                 "Charge",
                 f"{millify(predicted_metrics[0], precision=2)}",
@@ -161,6 +174,11 @@ if __name__ == '__main__':
                 "Molecular Weight",
                 f"{millify(predicted_metrics[2], precision=2)}",
                 f"{millify(predicted_metrics[2]-real_metrics[2], precision=2)}",
+            )
+            col4.metric(
+                "Mol. Ext. Coeff. @ 280 nm",
+                f"{millify(predicted_metrics[3], precision=2)}",
+                f"{millify(predicted_metrics[3]-real_metrics[3], precision=2)}",
             )
             acc = accuracy_score(
                 list(pdb_to_real_sequence[k]), list(pdb_to_sequence[k])
@@ -332,9 +350,3 @@ if __name__ == '__main__':
         # Only show specific plots after interaction wiith the interface
         if 'reload' not in st.session_state:
             st.session_state.reload = True
-
-    # style = st.sidebar.selectbox('style',['line','cross','stick','sphere','cartoon','clicksphere'])
-    # xyzview = py3Dmol.view(query='pdb:'+protein)
-    # xyzview.setStyle({style:{'color':'spectrum'}})
-    # xyzview.setBackgroundColor(bcolor)
-    # showmol(xyzview, height = 500,width=800)
