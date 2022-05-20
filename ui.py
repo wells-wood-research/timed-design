@@ -22,9 +22,10 @@ from utils.utils import get_rotamer_codec, load_dataset_and_predict
 def predict_dataset(file, path_to_model, rotamer_mode):
     with st.spinner("Calculating results.."):
         with tempfile.NamedTemporaryFile(delete=True) as dataset_file:
-            dataset_file.write(file.getbuffer())
-            dataset_file.seek(0)  # Resets the buffer back to the first line
-            path_to_dataset = Path(dataset_file.name)
+            # dataset_file.write(file.getbuffer())
+            # dataset_file.seek(0)  # Resets the buffer back to the first line
+            # path_to_dataset = Path(dataset_file.name)
+            path_to_dataset = Path(file)
             (
                 flat_dataset_map,
                 pdb_to_sequence,
@@ -95,7 +96,17 @@ def show_pdb(pdb_code, label_res: t.Optional[str] = None):
 if __name__ == "__main__":
     path_to_models = Path("models")
     st.sidebar.title("Design Proteins")
-    dataset = st.sidebar.file_uploader(label="Choose your PDB of interest")
+    dataset = Path("data.hdf5")
+    model = st.sidebar.selectbox(
+        label="Choose your PDB of interest",
+        options=(
+            "1a41",
+        ),
+
+    )
+    st.sidebar.write("or")
+    dataset1 = st.sidebar.file_uploader(label="Upload your PDB of interest", disabled=True)
+
     model = st.sidebar.selectbox(
         label="Choose your Model",
         options=(
@@ -113,6 +124,8 @@ if __name__ == "__main__":
     model_path = path_to_models / (model + ".h5")
     placeholder = st.sidebar.empty()
     result = placeholder.button("Run model", key="1")
+    st.sidebar.markdown("[Send me your feedback]()")
+
     res = list(standard_amino_acids.values())
     axis_labels = f"""
             datum.label == 0 ? '{res[0]}'
@@ -313,6 +326,7 @@ if __name__ == "__main__":
                 df = pd.DataFrame(vals)
                 df.fillna(0, inplace=True)
                 df.index = flat_categories
+                st.subheader(f"Probability Distribution at position {st.session_state.option}")
                 st.bar_chart(df, use_container_width=False)
 
             # Plot Residue Composition:
