@@ -13,9 +13,8 @@ from ampal.amino_acids import standard_amino_acids
 from millify import millify
 from sklearn.metrics import accuracy_score
 from stmol import showmol
-
 from utils.analyse_utils import calculate_metrics, calculate_seq_metrics
-from utils.utils import get_rotamer_codec, load_dataset_and_predict
+from utils.utils import get_rotamer_codec, load_dataset_and_predict, lookup_blosum62
 
 
 @st.cache(show_spinner=False)
@@ -62,6 +61,14 @@ def _calculate_metrics_wrapper(pdb_to_sequence: dict, pdb_to_real_sequence: dict
     return calculate_metrics(pdb_to_sequence, pdb_to_real_sequence)
 
 
+@st.cache(show_spinner=False)
+def _calculate_sequence_similarity_wrapper(real_seq: str, predicted_seq: str):
+    similarity_score = [
+        1 if lookup_blosum62(a, b) > 0 else 0
+        for a, b in zip(real_seq, predicted_seq)
+    ]
+    return np.mean(similarity_score)
+
 @st.cache(
     show_spinner=False, allow_output_mutation=True
 )  # Output mutation necessary as object changes as it is interacted with
@@ -72,7 +79,7 @@ def show_pdb(pdb_code, label_res: t.Optional[str] = None):
     # loop_resid_dict = {sw1_name: sw1_resids, sw2_name: sw2_resids}
     if label_res:
         xyzview.setStyle({"cartoon": {"color": "white", "opacity": 0.5}})
-        resn, _, chain, _ = label_res.split(" ")
+        _, resn, _, chain, _ = label_res.split(" ")
         resn= int(resn)
         zoom_residue = [
             { "resi": int(resn)},
@@ -189,6 +196,7 @@ if __name__ == "__main__":
             # Calculate Seq Metrics:
             real_metrics = _calculate_seq_metrics_wrapper(pdb_to_real_sequence[k])
             predicted_metrics = _calculate_seq_metrics_wrapper(pdb_to_sequence[k])
+            similarity_score = _calculate_sequence_similarity_wrapper(pdb_to_real_sequence[k], pdb_to_sequence[k] )
             # Display original Metrics:
             st.write("Original Sequence Metrics")
             col1, col2, col3, col4 = st.columns(4)
@@ -224,7 +232,9 @@ if __name__ == "__main__":
             acc = accuracy_score(
                 list(pdb_to_real_sequence[k]), list(pdb_to_sequence[k])
             )
-            st.metric("Sequence Identity", f"{millify(acc*100, precision=2)} %")
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Sequence Similarity", f"{millify(similarity_score*100, precision=2)} %")
+            col3.metric("Sequence Identity", f"{millify(acc*100, precision=2)} %")
             # Calculate composition of Sequence:
             comp_design = Counter(list(pdb_to_sequence[k]))
             comp_real = Counter(list(pdb_to_real_sequence[k]))
@@ -310,7 +320,10 @@ if __name__ == "__main__":
 
             # TODO: Code below does not work for multiple protein datasets. Select flat_dataset_map by pdb key first
             # Build string datasetmap for selection
-            f_1 = np.core.defchararray.add(flat_dataset_map[:, 2], " Chain ")
+            f_i = np.core.defchararray.add("(", np.array(np.arange(len(flat_dataset_map[:, 2])),dtype=str))
+            f_n = np.core.defchararray.add(f_i, ") ")
+            f_0 = np.core.defchararray.add(f_n, flat_dataset_map[:, 2])
+            f_1 = np.core.defchararray.add(f_0, " Chain ")
             f_2 = np.core.defchararray.add(f_1, flat_dataset_map[:, 1])
             f_3 = np.core.defchararray.add(f_2, " ")
             f_4 = np.core.defchararray.add(f_3, flat_dataset_map[:, 3])
