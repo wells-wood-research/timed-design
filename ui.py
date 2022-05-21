@@ -111,7 +111,7 @@ def show_pdb(pdb_code, label_res: t.Optional[str] = None):
 def _build_aposteriori_dataset_wrapper(
     path_to_pdb: Path, pdb_code: str, output_path: Path
 ):
-    structure_path = path_to_pdb / pdb_code[1:3] / (pdb_code + ".pdb1")
+    structure_path = path_to_pdb / pdb_code[1:3] / (pdb_code + ".pdb1.gz")
     data_path = output_path / (pdb_code + ".hdf5")
     if data_path.exists():
         return data_path
@@ -124,7 +124,7 @@ def _build_aposteriori_dataset_wrapper(
             voxels_per_side=21,
             codec=Codec.CNOCBCA(),
             processes=35,
-            is_pdb_gzipped=False,
+            is_pdb_gzipped=True,
             require_confirmation=False,
             voxels_as_gaussian=True,
             voxelise_all_states=False,
@@ -132,19 +132,30 @@ def _build_aposteriori_dataset_wrapper(
     return data_path
 
 
+@st.cache(show_spinner=False)
+def _search_all_pdbs(path_to_pdb: Path):
+    all_structures = path_to_pdb.glob(f"**/*.pdb1.gz")
+    all_pdbs = [p.stem[:4] for p in all_structures]
+    all_pdbs.sort()
+    return all_pdbs
+
 
 def main(args):
     path_to_data = Path(args.path_to_data)
     path_to_models = Path(args.path_to_models)
     path_to_pdb = Path(args.path_to_pdb)
     # Check path exists:
-    assert path_to_data.exists(), f"Path to data {path_to_data} does not exists. Set it up in the argparse."
-    assert path_to_models.exists(), f"Path to models {path_to_models} does not exists. Set it up in the argparse."
-    assert path_to_pdb.exists(), f"Path to pdb {path_to_pdb} does not exists.Set it up in the argparse."
+    assert (
+        path_to_data.exists()
+    ), f"Path to data {path_to_data} does not exists. Set it up in the argparse."
+    assert (
+        path_to_models.exists()
+    ), f"Path to models {path_to_models} does not exists. Set it up in the argparse."
+    assert (
+        path_to_pdb.exists()
+    ), f"Path to pdb {path_to_pdb} does not exists.Set it up in the argparse."
     # Find all pdbs:
-    all_structures = path_to_pdb.glob(f"**/*.pdb1")
-    all_pdbs = [p.stem for p in all_structures]
-    all_pdbs.sort()
+    all_pdbs = _search_all_pdbs(path_to_pdb)
     # Create Sidebar:
     st.sidebar.title("Design Proteins")
     pdb = st.sidebar.selectbox(
@@ -210,7 +221,9 @@ def main(args):
         placeholder.button("Run model", disabled=True, key="2")
         with st.spinner("Voxelising Protein Structure..."):
             t0_apo = time.time()
-            dataset = _build_aposteriori_dataset_wrapper(path_to_pdb=path_to_pdb, pdb_code=pdb, output_path=path_to_data)
+            dataset = _build_aposteriori_dataset_wrapper(
+                path_to_pdb=path_to_pdb, pdb_code=pdb, output_path=path_to_data
+            )
             t1_apo = time.time()
         # Use model to predict:
         t0 = time.time()
@@ -228,7 +241,8 @@ def main(args):
         total_time_string = time.strftime("%M m %S s", time.gmtime(t1 - t0_apo))
         if "count" not in st.session_state.keys():
             st.success(
-                f"Done! Took {total_time_string} in total. Voxelisation took {apo_time_string} and prediction took {time_string}")
+                f"Done! Took {total_time_string} in total. Voxelisation took {apo_time_string} and prediction took {time_string}"
+            )
         # Print Results:
         st.title("Model Output")
         # For each key in the dataset:
@@ -285,7 +299,8 @@ def main(args):
             )
             col1, col2, col3, col4 = st.columns(4)
             col1.metric(
-                "Sequence Similarity", f"{millify(similarity_score * 100, precision=2)} %"
+                "Sequence Similarity",
+                f"{millify(similarity_score * 100, precision=2)} %",
             )
             col3.metric("Sequence Identity", f"{millify(acc * 100, precision=2)} %")
             # Calculate composition of Sequence:
@@ -302,8 +317,8 @@ def main(args):
             df = pd.DataFrame(new_comp, columns=["Source", "Residue", "# Qty"])
             chart_residue_comp = (
                 alt.Chart(df)
-                    .mark_bar()
-                    .encode(
+                .mark_bar()
+                .encode(
                     column=alt.Column(
                         "Residue", title=None, header=alt.Header(orient="bottom")
                     ),
@@ -317,7 +332,7 @@ def main(args):
                     color=alt.Color("Source"),
                     tooltip=["# Qty"],
                 )
-                    .configure_view(stroke=None, strokeWidth=0.0)
+                .configure_view(stroke=None, strokeWidth=0.0)
             )
             # Show predicted probabilities:
             st.write("Predicted Probabilities")
@@ -346,8 +361,8 @@ def main(args):
                     rot_labels += full
                 cm = (
                     alt.Chart(source)
-                        .mark_rect()
-                        .encode(
+                    .mark_rect()
+                    .encode(
                         x=alt.X("Position:O"),
                         y=alt.Y("Residues:O"),
                         color="Probability (%):Q",
@@ -359,8 +374,8 @@ def main(args):
             else:
                 cm = (
                     alt.Chart(source)
-                        .mark_rect()
-                        .encode(
+                    .mark_rect()
+                    .encode(
                         x=alt.X("Position:O"),
                         y=alt.Y("Residues:O"),
                         color="Probability (%):Q",
@@ -373,7 +388,9 @@ def main(args):
             # TODO: Code below does not work for multiple protein datasets. Select flat_dataset_map by pdb key first
             if len(k) == 5:
                 current_chain = k[-1]
-                selected_dataset_map = flat_dataset_map[flat_dataset_map[:, 1] == current_chain]
+                selected_dataset_map = flat_dataset_map[
+                    flat_dataset_map[:, 1] == current_chain
+                ]
             else:
                 selected_dataset_map = flat_dataset_map
             # Build string datasetmap for selection
@@ -414,16 +431,16 @@ def main(args):
             else:
                 slice_seq = pdb_to_sequence
                 slice_real = pdb_to_real_sequence
-            results_dict = _calculate_metrics_wrapper(
-                slice_seq, slice_real
-            )
+            results_dict = _calculate_metrics_wrapper(slice_seq, slice_real)
             st.subheader("Descriptive Metrics")
             cols = st.columns(4)
             # Display Accuracy:
             for i, c in enumerate(cols):
                 acc_label = f"accuracy_{i + 2}"
                 acc = results_dict[acc_label]
-                c.metric(f"Top {i + 2} Accuracy", f"{millify(acc * 100, precision=2)} %")
+                c.metric(
+                    f"Top {i + 2} Accuracy", f"{millify(acc * 100, precision=2)} %"
+                )
             col1, col2, col3, _ = st.columns(4)
             col1.metric(
                 f"Macro Precision",
@@ -461,8 +478,8 @@ def main(args):
             )
             cm = (
                 alt.Chart(source)
-                    .mark_rect()
-                    .encode(
+                .mark_rect()
+                .encode(
                     x=alt.X(
                         "Predicted Residue:O", axis=alt.Axis(labelExpr=axis_labels)
                     ),
@@ -486,5 +503,3 @@ if __name__ == "__main__":
     parser.add_argument("--path_to_data", type=str, help="Path to .hdf5 data folder")
     params = parser.parse_args()
     main(params)
-
-

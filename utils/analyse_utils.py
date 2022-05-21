@@ -358,7 +358,7 @@ def calculate_metrics(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
         bias[flat_categories[int(y)]] = b
 
     unweighted_cm = confusion_matrix(
-        y_true_argmax, y_pred_argmax, normalize="all"
+        y_true_argmax, y_pred_argmax, normalize="all", labels=list(range(len(standard_amino_acids.keys())))
     )
 
     return {
