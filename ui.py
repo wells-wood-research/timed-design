@@ -163,6 +163,7 @@ def main(args):
     #     options=all_pdbs,
     # )
     pdb = st.sidebar.text_input('Enter a PDB Code:', value="1qys", placeholder="1qys")
+    pdb = pdb.lower()
     st.sidebar.write("or")
     dataset1 = st.sidebar.file_uploader(
         label="Upload your backbone/PDB of interest", disabled=True
