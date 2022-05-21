@@ -355,6 +355,7 @@ def load_dataset_and_predict(
     dataset_map_path: Path = "datasetmap.txt",
     blacklist: Path = None,
     predict_rotamers: bool = False,
+    model_name_suffix: str = ""
 ) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
     """
     Load discretized frame dataset (should be the same format as the trained models),
@@ -407,9 +408,9 @@ def load_dataset_and_predict(
     for i, m in enumerate(models):
         # Extract model names:
         if isinstance(m, Path):
-            model_name = m.stem
+            model_name = m.stem + model_name_suffix
         else:
-            model_name = str(m)
+            model_name = str(m) + model_name_suffix
         # Import Model:
         frame_model = tf.keras.models.load_model(Path(m))
         # Create output file for model:
