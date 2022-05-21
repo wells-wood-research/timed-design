@@ -214,6 +214,8 @@ def main(args):
     if pdb not in all_pdbs:
         st.sidebar.error("PDB code not found")
         placeholder.button("Run model", disabled=True, key="4")
+    else:
+        placeholder.button("Run model", disabled=False, key="4")
 
     if result or "reload" in st.session_state.keys():
         # When user clicks on calculate, check that the model is a rotamer model or not:
