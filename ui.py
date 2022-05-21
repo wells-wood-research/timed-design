@@ -136,7 +136,6 @@ def _build_aposteriori_dataset_wrapper(
 def _search_all_pdbs(path_to_pdb: Path):
     all_structures = path_to_pdb.glob(f"**/*.pdb1.gz")
     all_pdbs = [p.stem[:4] for p in all_structures]
-    all_pdbs.sort()
     return all_pdbs
 
 
@@ -158,10 +157,12 @@ def main(args):
     all_pdbs = _search_all_pdbs(path_to_pdb)
     # Create Sidebar:
     st.sidebar.title("Design Proteins")
-    pdb = st.sidebar.selectbox(
-        label="Choose your PDB of interest",
-        options=all_pdbs,
-    )
+    # Old button takes too long on that many PDBs:
+    # pdb = st.sidebar.selectbox(
+    #     label="Choose your PDB of interest",
+    #     options=all_pdbs,
+    # )
+    pdb = st.sidebar.text_input('Enter a PDB Code:', value="1qys", placeholder="1qys")
     st.sidebar.write("or")
     dataset1 = st.sidebar.file_uploader(
         label="Upload your backbone/PDB of interest", disabled=True
@@ -209,6 +210,9 @@ def main(args):
                 :datum.label == 18 ? '{res[18]}'
                 : '{res[19]}'
                 """
+    if pdb not in all_pdbs:
+        st.sidebar.error("PDB code not found")
+        placeholder.button("Run model", disabled=True, key="4")
 
     if result or "reload" in st.session_state.keys():
         # When user clicks on calculate, check that the model is a rotamer model or not:

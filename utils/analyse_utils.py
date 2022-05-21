@@ -362,7 +362,6 @@ def calculate_metrics(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
     )
 
     return {
-        "auc_ovo": 0,
         "report": report,
         "accuracy_1": accuracy_1,
         "accuracy_2": accuracy_2,
