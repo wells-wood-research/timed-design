@@ -305,14 +305,7 @@ def calculate_metrics(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
     y_true = np.array(y_true)
     y_pred_argmax = np.argmax(y_pred, axis=1)
     y_true_argmax = np.argmax(y_true, axis=1)
-    # Calculate metrics:
-    auc_ovo = roc_auc_score(
-        y_true,
-        y_pred,
-        multi_class="ovo",
-        labels=list(range(len(flat_categories))),
-        average="macro",
-    )
+
     report = classification_report(
         y_pred_argmax,
         y_true_argmax,
@@ -352,20 +345,24 @@ def calculate_metrics(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
     count_pred = Counter(y_pred_argmax)
     bias = {}
     sum_counts = len(y_true)
-    for y in count_labels.keys():
-        if y in count_labels and y in count_pred:
+    for y, _ in enumerate(standard_amino_acids.keys()):
+        if y in count_labels:
             c_label = count_labels[int(y)] / sum_counts
-            c_pred = count_pred[int(y)] / sum_counts
-            b = c_pred - c_label
-            bias[flat_categories[int(y)]] = b
         else:
-            bias[flat_categories[int(y)]] = np.nan
+            c_label = 0
+        if y in count_pred:
+            c_pred = count_pred[int(y)] / sum_counts
+        else:
+            c_pred = 0
+        b = c_pred - c_label
+        bias[flat_categories[int(y)]] = b
+
     unweighted_cm = confusion_matrix(
         y_true_argmax, y_pred_argmax, normalize="all"
     )
 
     return {
-        "auc_ovo": auc_ovo,
+        "auc_ovo": 0,
         "report": report,
         "accuracy_1": accuracy_1,
         "accuracy_2": accuracy_2,
