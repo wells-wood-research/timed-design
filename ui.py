@@ -364,14 +364,14 @@ def main(args):
             x, y = np.meshgrid(
                 list(flat_categories), range(0, len(pdb_to_probability[k]))
             )
-            source = pd.DataFrame(
-                {
+            source_dict = {
                     "Position": y.ravel(),
                     "Residues": x.ravel(),
                     "Probability (%)": np.array(pdb_to_probability[k]).ravel() * 100,
-                    "res": np.array(real_seq_display).ravel(),
                 }
-            )
+            if not rotamer_mode:
+                source_dict["res"] = np.array(real_seq_display).ravel()
+            source = pd.DataFrame(source_dict)
             # Rotamer Matrix is very large so it is hidden under a "spoiler" dropdown menu
             if rotamer_mode:
                 rot_labels = ""
