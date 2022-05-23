@@ -483,8 +483,7 @@ def main(args):
             # Plot Precision, Recall and F1:
             df = pd.DataFrame.from_dict(results_dict["report"])
             # Older version of scikit learn does not allow this:
-            # df.drop(["accuracy", "macro avg", "weighted avg"], axis=1, inplace=True)
-            df.drop(["micro avg", "macro avg", "weighted avg"], axis=1, inplace=True)
+            df.drop(["accuracy", "micro avg", "macro avg", "weighted avg"], axis=1, inplace=True, errors="ignore")
             df.drop(["support"], axis=0, inplace=True)
             df.columns = res
             st.bar_chart(df.T)
