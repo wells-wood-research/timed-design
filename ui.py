@@ -16,7 +16,11 @@ from sklearn.metrics import accuracy_score
 from stmol import showmol
 
 from aposteriori.data_prep.create_frame_data_set import Codec, make_frame_dataset
-from utils.analyse_utils import calculate_metrics, calculate_seq_metrics
+from utils.analyse_utils import (
+    calculate_metrics,
+    calculate_seq_metrics,
+    encode_sequence_to_onehot,
+)
 from utils.utils import get_rotamer_codec, load_dataset_and_predict, lookup_blosum62
 
 
@@ -139,6 +143,11 @@ def _search_all_pdbs(path_to_pdb: Path):
     return all_pdbs
 
 
+@st.cache(show_spinner=False)
+def _encode_sequence_to_onehot(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
+    return encode_sequence_to_onehot(pdb_to_sequence, pdb_to_real_sequence)
+
+
 def main(args):
     path_to_data = Path(args.path_to_data)
     path_to_models = Path(args.path_to_models)
@@ -162,7 +171,7 @@ def main(args):
     #     label="Choose your PDB of interest",
     #     options=all_pdbs,
     # )
-    pdb = st.sidebar.text_input('Enter a PDB Code:', value="1qys", placeholder="1qys")
+    pdb = st.sidebar.text_input("Enter a PDB Code:", value="1qys", placeholder="1qys")
     pdb = pdb.lower()
     st.sidebar.write("or")
     dataset1 = st.sidebar.file_uploader(
@@ -214,8 +223,6 @@ def main(args):
     if pdb not in all_pdbs:
         st.sidebar.error("PDB code not found")
         placeholder.button("Run model", disabled=True, key="4")
-    else:
-        placeholder.button("Run model", disabled=False, key="4")
 
     if result or "reload" in st.session_state.keys():
         # When user clicks on calculate, check that the model is a rotamer model or not:
@@ -343,6 +350,17 @@ def main(args):
             )
             # Show predicted probabilities:
             st.write("Predicted Probabilities")
+            if len(pdb_to_sequence.keys()) > 1:
+                slice_seq = {k: pdb_to_sequence[k]}
+                slice_real = {k: pdb_to_real_sequence[k]}
+            else:
+                slice_seq = pdb_to_sequence
+                slice_real = pdb_to_real_sequence
+            _, real_seq_display = _encode_sequence_to_onehot(slice_seq, slice_real)
+            real_seq_display = np.array(real_seq_display, dtype=str)
+            real_seq_display = [
+                w.replace("1.0", "Ori") for w in real_seq_display.ravel()
+            ]
             x, y = np.meshgrid(
                 list(flat_categories), range(0, len(pdb_to_probability[k]))
             )
@@ -351,6 +369,7 @@ def main(args):
                     "Position": y.ravel(),
                     "Residues": x.ravel(),
                     "Probability (%)": np.array(pdb_to_probability[k]).ravel() * 100,
+                    "res": np.array(real_seq_display).ravel(),
                 }
             )
             # Rotamer Matrix is very large so it is hidden under a "spoiler" dropdown menu
@@ -391,7 +410,17 @@ def main(args):
                         ),
                     )
                 )
-                st.altair_chart(cm, use_container_width=False)
+                text = cm.mark_text(baseline="middle").encode(
+                    text="res:N",
+                    color=alt.condition(
+                        alt.datum.res == "Ori",
+                        alt.value("red"),
+                        alt.value(""),
+                    ),
+                )
+                cm_text = cm + text
+                st.altair_chart(cm_text, use_container_width=False)
+                st.write('<p style="color:Tomato;">"ORI" indicates the residue in the original sequence.</p>',unsafe_allow_html=True)
             # TODO: Code below does not work for multiple protein datasets. Select flat_dataset_map by pdb key first
             if len(k) == 5:
                 current_chain = k[-1]
@@ -432,12 +461,6 @@ def main(args):
             st.altair_chart(chart_residue_comp, use_container_width=False)
             # Plot Performance Metrics:
             st.title(f"Performance Metrics {k}")
-            if len(pdb_to_sequence.keys()) > 1:
-                slice_seq = {k: pdb_to_sequence[k]}
-                slice_real = {k: pdb_to_real_sequence[k]}
-            else:
-                slice_seq = pdb_to_sequence
-                slice_real = pdb_to_real_sequence
             results_dict = _calculate_metrics_wrapper(slice_seq, slice_real)
             st.subheader("Descriptive Metrics")
             cols = st.columns(4)

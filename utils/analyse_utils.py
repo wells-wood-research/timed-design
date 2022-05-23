@@ -10,8 +10,12 @@ import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
-from ampal.analyse_protein import (sequence_charge, sequence_isoelectric_point, sequence_molar_extinction_280,
-                                   sequence_molecular_weight)
+from ampal.analyse_protein import (
+    sequence_charge,
+    sequence_isoelectric_point,
+    sequence_molar_extinction_280,
+    sequence_molecular_weight,
+)
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -281,14 +285,13 @@ def create_rot_cm(
         )
 
 
-def calculate_metrics(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
+def encode_sequence_to_onehot(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
     y_pred = []
     y_true = []
     one_hot_encode = np.zeros((len(standard_amino_acids), len(standard_amino_acids)))
     diag = np.arange(len(standard_amino_acids))
     one_hot_encode[diag, diag] = 1
     r_num = dict(zip(standard_amino_acids.keys(), one_hot_encode))
-    flat_categories = list(standard_amino_acids.keys())
     # Extract predictions:
     for pdb in pdb_to_sequence.keys():
         if pdb in pdb_to_real_sequence:
@@ -303,9 +306,14 @@ def calculate_metrics(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
             print(f"Error with pdb code {pdb}")
     y_pred = np.array(y_pred)
     y_true = np.array(y_true)
+    return y_pred, y_true
+
+
+def calculate_metrics(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
+    y_pred, y_true = encode_sequence_to_onehot(pdb_to_sequence, pdb_to_real_sequence)
     y_pred_argmax = np.argmax(y_pred, axis=1)
     y_true_argmax = np.argmax(y_true, axis=1)
-
+    flat_categories = list(standard_amino_acids.keys())
     report = classification_report(
         y_pred_argmax,
         y_true_argmax,
@@ -358,7 +366,10 @@ def calculate_metrics(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
         bias[flat_categories[int(y)]] = b
 
     unweighted_cm = confusion_matrix(
-        y_true_argmax, y_pred_argmax, normalize="all", labels=list(range(len(standard_amino_acids.keys())))
+        y_true_argmax,
+        y_pred_argmax,
+        normalize="all",
+        labels=list(range(len(standard_amino_acids.keys()))),
     )
 
     return {
