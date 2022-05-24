@@ -13,6 +13,8 @@ import streamlit as st
 from ampal.amino_acids import standard_amino_acids
 from millify import millify
 from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import MinMaxScaler
+
 from stmol import showmol
 
 from aposteriori.data_prep.create_frame_data_set import Codec, make_frame_dataset
@@ -22,33 +24,31 @@ from utils.analyse_utils import (
     encode_sequence_to_onehot,
 )
 from utils.utils import get_rotamer_codec, load_dataset_and_predict, lookup_blosum62
+from utils.sampling_utils import apply_temp_to_probs
+from sample import main_sample
 
 
 @st.cache(show_spinner=False)
 def predict_dataset(file, path_to_model, rotamer_mode, model_name_suffix):
     with st.spinner("Calculating results.."):
-        with tempfile.NamedTemporaryFile(delete=True) as dataset_file:
-            # dataset_file.write(file.getbuffer())
-            # dataset_file.seek(0)  # Resets the buffer back to the first line
-            # path_to_dataset = Path(dataset_file.name)
-            path_to_dataset = Path(file)
-            (
-                flat_dataset_map,
-                pdb_to_sequence,
-                pdb_to_probability,
-                pdb_to_real_sequence,
-                pdb_to_consensus,
-                pdb_to_consensus_prob,
-            ) = load_dataset_and_predict(
-                [path_to_model],
-                path_to_dataset,
-                batch_size=500,
-                start_batch=0,
-                blacklist=None,
-                dataset_map_path=" ",
-                predict_rotamers=rotamer_mode,
-                model_name_suffix=model_name_suffix,
-            )
+        path_to_dataset = Path(file)
+        (
+            flat_dataset_map,
+            pdb_to_sequence,
+            pdb_to_probability,
+            pdb_to_real_sequence,
+            pdb_to_consensus,
+            pdb_to_consensus_prob,
+        ) = load_dataset_and_predict(
+            [path_to_model],
+            path_to_dataset,
+            batch_size=500,
+            start_batch=0,
+            blacklist=None,
+            dataset_map_path=" ",
+            predict_rotamers=rotamer_mode,
+            model_name_suffix=model_name_suffix,
+        )
     return (
         flat_dataset_map,
         pdb_to_sequence,
@@ -113,7 +113,7 @@ def show_pdb(pdb_code, label_res: t.Optional[str] = None):
 
 @st.cache(show_spinner=False)
 def _build_aposteriori_dataset_wrapper(
-    path_to_pdb: Path, pdb_code: str, output_path: Path
+    path_to_pdb: Path, pdb_code: str, output_path: Path, workers: int
 ):
     structure_path = path_to_pdb / pdb_code[1:3] / (pdb_code + ".pdb1.gz")
     data_path = output_path / (pdb_code + ".hdf5")
@@ -127,7 +127,7 @@ def _build_aposteriori_dataset_wrapper(
             frame_edge_length=21.0,
             voxels_per_side=21,
             codec=Codec.CNOCBCA(),
-            processes=35,
+            processes=workers,
             is_pdb_gzipped=True,
             require_confirmation=False,
             voxels_as_gaussian=True,
@@ -146,6 +146,56 @@ def _search_all_pdbs(path_to_pdb: Path):
 @st.cache(show_spinner=False)
 def _encode_sequence_to_onehot(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
     return encode_sequence_to_onehot(pdb_to_sequence, pdb_to_real_sequence)
+
+
+@st.cache(show_spinner=False)
+def _optimize_seq_with_montecarlo(
+    path_to_pred_matrix,
+    path_to_datasetmap,
+    rotamer_mode,
+    sample_n,
+    workers,
+    temperature,
+):
+    arguments = [
+        "--path_to_pred_matrix",
+        path_to_pred_matrix,
+        "--path_to_datasetmap",
+        path_to_datasetmap,
+        "--sample_n",
+        str(sample_n),
+        "--workers",
+        str(workers),
+        "--temperature",
+        str(temperature),
+    ]
+    # arguments += [f"--predict_rotamers", True]
+    # TODO: There must be a better way to do this:
+    parser = argparse.ArgumentParser(description="")
+    parser.add_argument("--path_to_pred_matrix")
+    parser.add_argument("--path_to_datasetmap")
+    parser.add_argument("--sample_n", type=int)
+    parser.add_argument("--workers", type=int)
+    parser.add_argument("--temperature", type=float)
+    # Other arguments:
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--support_old_datasetmap", type=int, default=False)
+    parser.add_argument(
+        "--save_as",
+        type=str,
+        default="all",
+        const="all",
+        nargs="?",
+        choices=["fasta", "json", "all"],
+    )
+    parser.add_argument(
+        "--predict_rotamers",
+        action="store_true",
+        default=True if rotamer_mode else False,
+    )
+    arg = parser.parse_args(args=arguments)
+    output_paths = main_sample(arg)
+    return pd.read_csv(output_paths[-1])
 
 
 def main(args):
@@ -183,6 +233,7 @@ def main(args):
             "TIMED",
             "TIMED_Deep",
             "TIMED_rotamer",
+            "TIMED_rotamer_balanced",
             "TIMED_rotamer_not_so_deep",
             "TIMED_rotamer_deep",
             "DenseCPD",
@@ -192,8 +243,15 @@ def main(args):
         help="To check the performance of each of the models visit: https://github.com/wells-wood-research/timed-design/releases/tag/model",
     )
     model_path = path_to_models / (model + ".h5")
-    placeholder = st.sidebar.empty()
-    result = placeholder.button("Run model", key="1")
+    # Add Advanced settings menu for monte carlo sampling
+    with st.sidebar.expander("Advanced Settings"):
+        # All require to be outside sidebar as per: https://github.com/streamlit/streamlit/issues/3157
+        use_montecarlo = st.checkbox("Optimize sequences using Monte Carlo")
+        sample_n = st.slider("Number of sequences to sample", 3, 300, 200)
+        temperature = st.slider("Temperature Factor", 0.1, 1.0, 1.0)
+
+    placeholder_run_button = st.sidebar.empty()
+    result = placeholder_run_button.button("Run model", key="1")
     st.sidebar.markdown(
         "[Tell us what you think!](https://forms.office.com/Pages/ResponsePage.aspx?id=sAafLmkWiUWHiRCgaTTcYY_RqhHaishKsB4CsyQgPCxUOU9DQjhJU0s1QjZVVTNPU0xDVzlFTEhNMS4u)"
     )
@@ -222,7 +280,7 @@ def main(args):
                 """
     if pdb not in all_pdbs:
         st.sidebar.error("PDB code not found")
-        placeholder.button("Run model", disabled=True, key="4")
+        placeholder_run_button.button("Run model", disabled=True, key="4")
 
     if result or "reload" in st.session_state.keys():
         # When user clicks on calculate, check that the model is a rotamer model or not:
@@ -232,11 +290,14 @@ def main(args):
         else:
             flat_categories = standard_amino_acids.values()
         # Disable Run Model button while running the app: (avoids clogging)
-        placeholder.button("Run model", disabled=True, key="2")
+        placeholder_run_button.button("Run model", disabled=True, key="2")
         with st.spinner("Voxelising Protein Structure..."):
             t0_apo = time.time()
             dataset = _build_aposteriori_dataset_wrapper(
-                path_to_pdb=path_to_pdb, pdb_code=pdb, output_path=path_to_data
+                path_to_pdb=path_to_pdb,
+                pdb_code=pdb,
+                output_path=path_to_data,
+                workers=args.workers,
             )
             t1_apo = time.time()
         # Use model to predict:
@@ -365,10 +426,10 @@ def main(args):
                 list(flat_categories), range(0, len(pdb_to_probability[k]))
             )
             source_dict = {
-                    "Position": y.ravel(),
-                    "Residues": x.ravel(),
-                    "Probability (%)": np.array(pdb_to_probability[k]).ravel() * 100,
-                }
+                "Position": y.ravel(),
+                "Residues": x.ravel(),
+                "Probability (%)": np.array(pdb_to_probability[k]).ravel() * 100,
+            }
             if not rotamer_mode:
                 source_dict["res"] = np.array(real_seq_display).ravel()
             source = pd.DataFrame(source_dict)
@@ -420,7 +481,10 @@ def main(args):
                 )
                 cm_text = cm + text
                 st.altair_chart(cm_text, use_container_width=False)
-                st.write('<p style="color:Tomato;">"ORI" indicates the residue in the original sequence.</p>',unsafe_allow_html=True)
+                st.write(
+                    '<p style="color:Tomato;">"ORI" indicates the residue in the original sequence.</p>',
+                    unsafe_allow_html=True,
+                )
             # TODO: Code below does not work for multiple protein datasets. Select flat_dataset_map by pdb key first
             if len(k) == 5:
                 current_chain = k[-1]
@@ -483,7 +547,12 @@ def main(args):
             # Plot Precision, Recall and F1:
             df = pd.DataFrame.from_dict(results_dict["report"])
             # Older version of scikit learn does not allow this:
-            df.drop(["accuracy", "micro avg", "macro avg", "weighted avg"], axis=1, inplace=True, errors="ignore")
+            df.drop(
+                ["accuracy", "micro avg", "macro avg", "weighted avg"],
+                axis=1,
+                inplace=True,
+                errors="ignore",
+            )
             df.drop(["support"], axis=0, inplace=True)
             df.columns = res
             st.bar_chart(df.T)
@@ -519,7 +588,97 @@ def main(args):
             )
             st.subheader("Confusion Matrix")
             st.altair_chart(cm, use_container_width=True)
-        placeholder.button("Run model", disabled=False, key="3")
+            if use_montecarlo:
+                base = f"{model}{k[:4]}"
+                path_to_datasetmap = base + ".txt"
+                if rotamer_mode:
+                    base += "_rot"
+                path_to_pred_matrix = base + ".csv"
+                opt_seq_metrics = _optimize_seq_with_montecarlo(
+                    path_to_pred_matrix,
+                    path_to_datasetmap,
+                    rotamer_mode,
+                    sample_n,
+                    args.workers,
+                    temperature,
+                )
+                sum_all_errors = False
+                selected_columns = [
+                    "charge",
+                    "isoelectric_point",
+                    "molecular_weight",
+                    "molar_extinction",
+                ]
+                for c_idx, curr_col in enumerate(selected_columns):
+                    opt_seq_metrics[curr_col + "_mae"] = (
+                        opt_seq_metrics[curr_col] - real_metrics[c_idx]
+                    )
+                    opt_seq_metrics[curr_col + "_mae_norm"] = (
+                        opt_seq_metrics[curr_col] - opt_seq_metrics[curr_col].min()
+                    ) / (
+                        opt_seq_metrics[curr_col].max()
+                        - opt_seq_metrics[curr_col].min()
+                    )
+                    if isinstance(sum_all_errors, np.ndarray):
+                        sum_all_errors += opt_seq_metrics[
+                            curr_col + "_mae_norm"
+                        ].to_numpy()
+                    else:
+                        sum_all_errors = opt_seq_metrics[
+                            curr_col + "_mae_norm"
+                        ].to_numpy()
+                opt_seq_metrics["summed_mae"] = sum_all_errors
+                opt_seq_metrics.sort_values("summed_mae", inplace=True)
+                st.title(f"Optimized Sequence {k}")
+                for seq in range(0, 3):
+                    curr_slice = opt_seq_metrics.iloc[[seq]].values.tolist()[0]
+                    curr_sequence = curr_slice[1]
+                    st.subheader(f"Sequence {seq}")
+                    st.code(curr_sequence)
+                    curr_slice = curr_slice[2:]
+                    # TODO convert to function:
+                    col1, col2, col3, col4 = st.columns(4)
+                    col1.metric(
+                        "Charge",
+                        f"{millify(curr_slice[0], precision=2)}",
+                        f"{millify(curr_slice[0] - real_metrics[0], precision=2)}",
+                    )
+                    col2.metric(
+                        "Isoelectric Point",
+                        f"{millify(curr_slice[1], precision=2)}",
+                        f"{millify(curr_slice[1] - real_metrics[1], precision=2)}",
+                    )
+                    col3.metric(
+                        "Molecular Weight",
+                        f"{millify(curr_slice[2], precision=2)}",
+                        f"{millify(curr_slice[2] - real_metrics[2], precision=2)}",
+                    )
+                    col4.metric(
+                        "Mol. Ext. Coeff. @ 280 nm",
+                        f"{millify(curr_slice[3], precision=2)}",
+                        f"{millify(curr_slice[3] - real_metrics[3], precision=2)}",
+                    )
+                    acc = accuracy_score(list(curr_sequence), list(pdb_to_sequence[k]))
+                    similarity_score = _calculate_sequence_similarity_wrapper(
+                        curr_sequence, pdb_to_sequence[k]
+                    )
+                    col1, col2, col3, col4 = st.columns(4)
+                    col1.metric(
+                        "Sequence Similarity",
+                        f"{millify(similarity_score * 100, precision=2)} %",
+                    )
+                    col3.metric(
+                        "Sequence Identity", f"{millify(acc * 100, precision=2)} %"
+                    )
+                st.subheader("Sampled Sequences")
+                st.write(opt_seq_metrics)
+                st.download_button(
+                    label="Download data as CSV",
+                    data=opt_seq_metrics.to_csv().encode("utf-8"),
+                    file_name=f"monte_carlo_{model}_{k}.csv",
+                    mime="text/csv",
+                )
+        placeholder_run_button.button("Run model", disabled=False, key="3")
         # Only show specific plots after interaction wiith the interface
         if "reload" not in st.session_state:
             st.session_state.reload = True
@@ -530,5 +689,8 @@ if __name__ == "__main__":
     parser.add_argument("--path_to_models", type=str, help="Path to .h5 model files")
     parser.add_argument("--path_to_pdb", type=str, help="Path to pdb folder")
     parser.add_argument("--path_to_data", type=str, help="Path to .hdf5 data folder")
+    parser.add_argument(
+        "--workers", type=int, default=8, help="Number of workers to use (default: 8)"
+    )
     params = parser.parse_args()
     main(params)

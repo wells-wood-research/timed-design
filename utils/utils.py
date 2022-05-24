@@ -73,6 +73,9 @@ def load_datasetmap(path_to_datasetmap: Path, is_old: bool = False) -> np.ndarra
             dtype=str,
             skip_header=3,
         )
+    # If list only contains 1 pdb, it fails to create a list of list [pdb_code, count]
+    if len(dataset_map) == 2:
+        dataset_map = [dataset_map]
 
     return dataset_map
 
@@ -590,13 +593,17 @@ def extract_sequence_from_pred_matrix(
     is_consensus = False
     res_to_r_dic = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
     if rotamers_categories:
-        res_dic = [res_to_r_dic[res.split("_")[0]] for res in rotamers_categories]
+        if len(rotamers_categories[0]) == 1:
+            res_dic = rotamers_categories
+        else:
+            res_dic = [res_to_r_dic[res.split("_")[0]] for res in rotamers_categories]
     else:
         res_dic = list(standard_amino_acids.keys())
     # Extract max idx for prediction matrix:
     max_idx = np.argmax(prediction_matrix, axis=1)
     # Loop through dataset map to create dictionaries:
     previous_count = 0
+    old_datasetmap = True if len(flat_dataset_map[0]) == 4 else False
     for i in range(len(flat_dataset_map)):
         # Add support for different dataset maps:
         if old_datasetmap:
