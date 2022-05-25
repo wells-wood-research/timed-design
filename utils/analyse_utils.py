@@ -13,6 +13,7 @@ from ampal.amino_acids import standard_amino_acids
 from ampal.analyse_protein import (
     sequence_charge,
     sequence_isoelectric_point,
+    sequence_molar_extinction_280,
     sequence_molecular_weight,
 )
 from sklearn.metrics import (
@@ -31,7 +32,7 @@ from utils.scwrl_utils import pack_side_chains_scwrl
 from utils.utils import get_rotamer_codec
 
 
-def calculate_seq_metrics(seq: str) -> t.Tuple[float, float, float]:
+def calculate_seq_metrics(seq: str) -> t.Tuple[float, float, float, float]:
     """
     Calculates sequence metrics.
 
@@ -44,13 +45,14 @@ def calculate_seq_metrics(seq: str) -> t.Tuple[float, float, float]:
 
     Returns
     -------
-    metrics: t.Tuple[float, float, float]
-        (charge , iso_ph, mw)
+    metrics: t.Tuple[float, float, float, float]
+        (charge , iso_ph, mw, me)
     """
     charge = sequence_charge(seq)
     iso_ph = sequence_isoelectric_point(seq)
     mw = sequence_molecular_weight(seq)
-    return charge, iso_ph, mw
+    me = sequence_molar_extinction_280(seq)
+    return charge, iso_ph, mw, me
 
 
 def save_assembly_to_path(structure: ampal.Assembly, output_dir: Path, name: str):
@@ -72,7 +74,9 @@ def save_assembly_to_path(structure: ampal.Assembly, output_dir: Path, name: str
         f.write(structure.pdb)
 
 
-def pack_sidechains(structure: ampal.Assembly, sequence: str, scwrl_path: Path) -> ampal.Assembly:
+def pack_sidechains(
+    structure: ampal.Assembly, sequence: str, scwrl_path: Path
+) -> ampal.Assembly:
     """
     Packs sequence of residues onto ampal assembly using SCWRL
 
@@ -89,12 +93,19 @@ def pack_sidechains(structure: ampal.Assembly, sequence: str, scwrl_path: Path) 
         Packed structure with scwrl
     """
     return pack_side_chains_scwrl(
-        assembly=structure, sequences=sequence, rigid_rotamer_model=False, scwrl_path=scwrl_path,
+        assembly=structure,
+        sequences=sequence,
+        rigid_rotamer_model=False,
+        scwrl_path=scwrl_path,
     )
 
 
 def analyse_with_scwrl(
-    pdb_to_seq: dict, pdb_to_assembly: dict, output_path: Path, suffix: str, scwrl_path: Path
+    pdb_to_seq: dict,
+    pdb_to_assembly: dict,
+    output_path: Path,
+    suffix: str,
+    scwrl_path: Path,
 ) -> (dict, dict):
     """
     Analyses rotamer prediction with SCWRL
@@ -215,7 +226,9 @@ def plot_cm(
     plt.close()
 
 
-def create_rot_cm(cm: np.ndarray, rot_categories: t.List[str], mode: str, output_path: Path):
+def create_rot_cm(
+    cm: np.ndarray, rot_categories: t.List[str], mode: str, output_path: Path
+):
     """
     Create rotamer confusion matrices.
 
@@ -272,7 +285,110 @@ def create_rot_cm(cm: np.ndarray, rot_categories: t.List[str], mode: str, output
         )
 
 
-def calculate_metrics(
+def encode_sequence_to_onehot(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
+    y_pred = []
+    y_true = []
+    one_hot_encode = np.zeros((len(standard_amino_acids), len(standard_amino_acids)))
+    diag = np.arange(len(standard_amino_acids))
+    one_hot_encode[diag, diag] = 1
+    r_num = dict(zip(standard_amino_acids.keys(), one_hot_encode))
+    # Extract predictions:
+    for pdb in pdb_to_sequence.keys():
+        if pdb in pdb_to_real_sequence:
+            current_true = []
+            current_pred = []
+            for r_t, r_p in zip(pdb_to_real_sequence[pdb], pdb_to_sequence[pdb]):
+                current_true.append(r_num[r_t])
+                current_pred.append(r_num[r_p])
+            y_true += current_true
+            y_pred += current_pred
+        else:
+            print(f"Error with pdb code {pdb}")
+    y_pred = np.array(y_pred)
+    y_true = np.array(y_true)
+    return y_pred, y_true
+
+
+def calculate_metrics(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
+    y_pred, y_true = encode_sequence_to_onehot(pdb_to_sequence, pdb_to_real_sequence)
+    y_pred_argmax = np.argmax(y_pred, axis=1)
+    y_true_argmax = np.argmax(y_true, axis=1)
+    flat_categories = list(standard_amino_acids.keys())
+    report = classification_report(
+        y_pred_argmax,
+        y_true_argmax,
+        labels=list(range(len(flat_categories))),
+        target_names=flat_categories,
+        output_dict=True,  # Returns a dictionary
+    )
+    accuracy_1 = accuracy_score(y_true_argmax, y_pred_argmax)
+    accuracy_2 = top_k_accuracy_score(
+        y_true_argmax, y_pred, k=2, labels=list(range(len(flat_categories)))
+    )
+    accuracy_3 = top_k_accuracy_score(
+        y_true_argmax, y_pred, k=3, labels=list(range(len(flat_categories)))
+    )
+    accuracy_4 = top_k_accuracy_score(
+        y_true_argmax, y_pred, k=4, labels=list(range(len(flat_categories)))
+    )
+    accuracy_5 = top_k_accuracy_score(
+        y_true_argmax, y_pred, k=5, labels=list(range(len(flat_categories)))
+    )
+    precision = precision_score(
+        y_pred_argmax,
+        y_true_argmax,
+        average="macro",
+        labels=list(range(len(flat_categories))),
+        zero_division=0,
+    )
+    recall = recall_score(
+        y_pred_argmax,
+        y_true_argmax,
+        average="macro",
+        labels=list(range(len(flat_categories))),
+        zero_division=0,
+    )
+    # Calculate bias:
+    count_labels = Counter(y_true_argmax)
+    count_pred = Counter(y_pred_argmax)
+    bias = {}
+    sum_counts = len(y_true)
+    for y, _ in enumerate(standard_amino_acids.keys()):
+        if y in count_labels:
+            c_label = count_labels[int(y)] / sum_counts
+        else:
+            c_label = 0
+        if y in count_pred:
+            c_pred = count_pred[int(y)] / sum_counts
+        else:
+            c_pred = 0
+        b = c_pred - c_label
+        bias[flat_categories[int(y)]] = b
+
+    unweighted_cm = confusion_matrix(
+        y_true_argmax,
+        y_pred_argmax,
+        normalize="all",
+        labels=list(range(len(standard_amino_acids.keys()))),
+    )
+
+    return {
+        "report": report,
+        "accuracy_1": accuracy_1,
+        "accuracy_2": accuracy_2,
+        "accuracy_3": accuracy_3,
+        "accuracy_4": accuracy_4,
+        "accuracy_5": accuracy_5,
+        "precision": precision,
+        "recall": recall,
+        "count_labels": count_labels,
+        "count_pred": count_pred,
+        "bias": bias,
+        "unweighted_cm": unweighted_cm,
+    }
+
+
+def calculate_rotamer_metrics(
     pdb_to_probability: dict,
     pdb_to_rotamer: dict,
     rot_categories: t.List[str],
@@ -417,7 +533,12 @@ def calculate_metrics(
     unweighted_cm = confusion_matrix(
         y_true, y_argmax, normalize="all", labels=list(range(338))
     )
-    create_rot_cm(unweighted_cm, rot_categories, mode=f"{suffix}_unweighted", output_path=output_path,)
+    create_rot_cm(
+        unweighted_cm,
+        rot_categories,
+        mode=f"{suffix}_unweighted",
+        output_path=output_path,
+    )
     sample_weights = [weights[int(y)] for y in y_true]
     weighted_cm = confusion_matrix(
         y_true,
@@ -426,7 +547,12 @@ def calculate_metrics(
         sample_weight=sample_weights,
         labels=list(range(338)),
     )
-    create_rot_cm(weighted_cm, rot_categories, mode=f"{suffix}_weighted", output_path=output_path,)
+    create_rot_cm(
+        weighted_cm,
+        rot_categories,
+        mode=f"{suffix}_weighted",
+        output_path=output_path,
+    )
 
 
 def extract_rotamer_encoding(pdb_code: str, monomer: ampal.Assembly) -> dict:

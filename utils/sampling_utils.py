@@ -20,21 +20,32 @@ def save_as(pdb_to_sampled: dict, filename: str, mode: str):
     mode: str
         Whether to save in fasta, json or both
     """
+    output_paths = []
     print(f"Saving sampled sequences in mode {mode}")
     if mode != "fasta":
-        with open(f"{filename}.json", "w") as outfile:
+        outfile_path = f"{filename}.json"
+        output_paths.append(outfile_path)
+        with open(outfile_path, "w") as outfile:
             json.dump(pdb_to_sampled, outfile)
     if mode != "json":
-        with open(f"{filename}.fasta", "w") as outfile:
+        outfile_path = f"{filename}.fasta"
+        output_paths.append(outfile_path)
+        with open(outfile_path, "w") as outfile:
             for pdb, seq_list in pdb_to_sampled.items():
                 for i, seq in enumerate(seq_list):
                     outfile.write(f">{pdb}_{i}\n")
                     outfile.write(f"{seq[0]}\n")  # the first item is the seq
     print("Saving Metrics")
-    with open(f"{filename}_metrics.csv", "w") as outfile:
+    outfile_path = f"{filename}_metrics.csv"
+    output_paths.append(outfile_path)
+    with open(outfile_path, "w") as outfile:
+        outfile.write(
+            "pdb,sequence,charge,isoelectric_point,molecular_weight,molar_extinction\n"
+        )
         for pdb, seq_list in pdb_to_sampled.items():
             for i, seq in enumerate(seq_list):
-                outfile.write(f"{pdb},{seq[0]},{seq[1]},{seq[2]}\n")
+                outfile.write(f"{pdb},{seq[0]},{seq[1]},{seq[2]},{seq[3]},{seq[4]}\n")
+    return output_paths
 
 
 def random_choice_prob_index(

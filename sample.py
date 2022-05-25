@@ -6,8 +6,7 @@ from pathlib import Path
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
 
-from utils.sampling_utils import apply_temp_to_probs, sample_from_sequences, \
-    save_as
+from utils.sampling_utils import apply_temp_to_probs, sample_from_sequences, save_as
 from utils.utils import (
     extract_sequence_from_pred_matrix,
     get_rotamer_codec,
@@ -15,7 +14,43 @@ from utils.utils import (
 )
 
 
-def main(args):
+def sample_with_multiprocessing(
+    workers, pdb_codes, sample_n, pdb_to_probability, flat_categories
+):
+    """
+
+    Parameters
+    ----------
+    workers
+    pdb_codes
+    sample_n
+    pdb_to_probability
+    flat_categories
+
+    Returns
+    -------
+
+    """
+    with Pool(processes=workers) as p:
+        pdb_to_sample_dict_list = p.starmap(
+            sample_from_sequences,
+            zip(
+                pdb_codes,
+                repeat(sample_n),
+                repeat(pdb_to_probability),
+                repeat(flat_categories),
+            ),
+        )
+        p.close()
+    # Flatten dictionary:
+    pdb_to_sample = {}
+    for curr_dict in pdb_to_sample_dict_list:
+        if curr_dict is not None:
+            pdb_to_sample.update(curr_dict)
+    return pdb_to_sample
+
+
+def main_sample(args):
     # Set Random seed:
     np.random.default_rng(seed=args.seed)
     # Sanitise Paths:
@@ -62,46 +97,35 @@ def main(args):
         rotamers_categories=flat_categories,
         old_datasetmap=args.support_old_datasetmap,
     )
-    # Select only 59 structures used for sampling:
-    af2_benchmark_structures = ["1hq0A", "1a41A", "1ds1A", "1dvoA", "1g3pA",
-                                "1h70A", "1hxrA", "1jovA", "1l0sA", "1o7iA",
-                                "1uzkA", "1x8qA", "2bhuA", "2dyiA", "2imhA",
-                                "2j8kA", "2of3A", "2ra1A", "2v3gA", "2v3iA",
-                                "2w18A", "3cxbA", "3dadA", "3dkrA", "3e3vA",
-                                "3e4gA", "3e8tA", "3essA", "3giaA", "3gohA",
-                                "3hvmA", "3klkA", "3kluA", "3kstA", "3kyfA",
-                                "3maoA", "3o4pA", "3oajA", "3q1nA", "3rf0A",
-                                "3swgA", "3zbdA", "3zh4A", "4a6qA", "4ecoA",
-                                "4efpA", "4fcgA", "4fs7A", "4i1kA", "4le7A",
-                                "4m4dA", "4ozwA", "4wp6A", "4y5jA", "5b1rA",
-                                "5bufA", "5c12A", "5dicA", "6baqA"]
-    # TODO: Improve implementation
-    pdb_codes = af2_benchmark_structures
+    # # Select only 59 structures used for sampling:
+    # af2_benchmark_structures = ["1hq0A", "1a41A", "1ds1A", "1dvoA", "1g3pA",
+    #                             "1h70A", "1hxrA", "1jovA", "1l0sA", "1o7iA",
+    #                             "1uzkA", "1x8qA", "2bhuA", "2dyiA", "2imhA",
+    #                             "2j8kA", "2of3A", "2ra1A", "2v3gA", "2v3iA",
+    #                             "2w18A", "3cxbA", "3dadA", "3dkrA", "3e3vA",
+    #                             "3e4gA", "3e8tA", "3essA", "3giaA", "3gohA",
+    #                             "3hvmA", "3klkA", "3kluA", "3kstA", "3kyfA",
+    #                             "3maoA", "3o4pA", "3oajA", "3q1nA", "3rf0A",
+    #                             "3swgA", "3zbdA", "3zh4A", "4a6qA", "4ecoA",
+    #                             "4efpA", "4fcgA", "4fs7A", "4i1kA", "4le7A",
+    #                             "4m4dA", "4ozwA", "4wp6A", "4y5jA", "5b1rA",
+    #                             "5bufA", "5c12A", "5dicA", "6baqA"]
+    # # TODO: Improve implementation
+    # pdb_codes = af2_benchmark_structures
+    pdb_codes = list(pdb_to_probability.keys())
     print(
         f"Ready to sample {args.sample_n} for each of the {len(pdb_codes)} proteins from {args.path_to_pred_matrix.stem}."
     )
-    with Pool(processes=args.workers) as p:
-        pdb_to_sample_dict_list = p.starmap(
-            sample_from_sequences,
-            zip(
-                pdb_codes,
-                repeat(args.sample_n),
-                repeat(pdb_to_probability),
-                repeat(flat_categories),
-            ),
-        )
-        p.close()
-    # Flatten dictionary:
-    pdb_to_sample = {}
-    for curr_dict in pdb_to_sample_dict_list:
-        if curr_dict is not None:
-            pdb_to_sample.update(curr_dict)
+    pdb_to_sample = sample_with_multiprocessing(
+        args.workers, pdb_codes, args.sample_n, pdb_to_probability, flat_categories
+    )
     # Save sequences to files:
-    save_as(
+    output_paths = save_as(
         pdb_to_sample,
-        filename=f"{args.path_to_pred_matrix.stem}_temp_{args.temperature}_n_{args.sample_n}",
+        filename=f"{args.path_to_pred_matrix.stem}_temp_{args.temperature}_n_{args.sample_n}_{pdb_codes[0]}",
         mode=args.save_as,
     )
+    return output_paths
 
 
 if __name__ == "__main__":
@@ -157,4 +181,4 @@ if __name__ == "__main__":
         "--seed", type=int, default=42, help="random seed (default: 42)"
     )
     params = parser.parse_args()
-    main(params)
+    main_sample(params)
