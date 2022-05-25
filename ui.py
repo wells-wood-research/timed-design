@@ -195,7 +195,7 @@ def _encode_sequence_to_onehot(pdb_to_sequence: dict, pdb_to_real_sequence: dict
     return encode_sequence_to_onehot(pdb_to_sequence, pdb_to_real_sequence)
 
 
-@st.cache(show_spinner=False, allow_output_mutation=True)
+@st.cache(show_spinner=True, allow_output_mutation=True)
 def _optimize_seq_with_montecarlo(
     path_to_pred_matrix,
     path_to_datasetmap,
@@ -650,7 +650,7 @@ def _draw_sidebar(all_pdbs: t.List[str]):
         # Not using the sidebar as per https://github.com/streamlit/streamlit/issues/3157
         use_montecarlo_button = st.empty()
         use_montecarlo = use_montecarlo_button.checkbox(
-            "Optimize sequences using Monte Carlo"
+            "Optimize sequences using Monte Carlo", key="mc"
         )
         sample_n_button = st.empty()
         sample_n = sample_n_button.slider("Number of sequences to sample", 3, 300, 200)
@@ -773,17 +773,18 @@ def main(args):
                 pdb_to_real_sequence,
             )
             _draw_performance_section(k, slice_seq, slice_real, res, axis_labels)
-            if use_montecarlo:
-                _draw_optimisation_section(
-                    k,
-                    rotamer_mode,
-                    model,
-                    sample_n,
-                    args.workers,
-                    temperature,
-                    real_metrics,
-                    pdb_to_real_sequence,
-                )
+            if "mc_3" in st.session_state.keys():
+                if st.session_state["mc_3"]:
+                    _draw_optimisation_section(
+                        k,
+                        rotamer_mode,
+                        model,
+                        sample_n,
+                        args.workers,
+                        temperature,
+                        real_metrics,
+                        pdb_to_real_sequence,
+                    )
 
         placeholder_run_button.button("Run model", disabled=False, key="3")
         with st.sidebar.expander("Advanced Settings"):
