@@ -1,6 +1,8 @@
 <div align="center">
   <img src="img/logo.png"><br>
+  <img src="https://i.ibb.co/pzJxq7L/prova.gif" alt="demo"/><br>
   <h2>Protein Sequence Design Made Easy</h2><br>
+
 </div>
 
 [timed-design](https://github.com/wells-wood-research/timed-design) is a library to use protein sequence design models and analyse predictions. We feature retrained Keras models for novel models (**TIMED** and **TIMED-rotamer**) as well as re-implementations of well known models for which code or model are not intuitively available (**ProDCoNN**, **DenseCPD**, **DenseNet**). 
@@ -211,8 +213,16 @@ In order to use a rotamer model, use the flag `--predict_rotamers True`:
 python3 predict.py --path_to_dataset dataset.hdf5 --path_to_model timed_rot.h5 --predict_rotamers True
 ```
 
+### 1.4 Run User Interface (UI)
+
+To run the UI you must have `streamlit` installed. Then run:
 
 
+```
+streamlit run ui.py --  --path_to_models /models --path_to_pdb /pdb --path_to_data /data --workers 8
+```
+
+---Online version coming soon---
 
 ## 2. Sample Sequences Using Monte Carlo
 
