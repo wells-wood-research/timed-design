@@ -1,8 +1,7 @@
 <div align="center">
-  <img src="img/logo.png"><br>
-  <img src="https://i.ibb.co/pzJxq7L/prova.gif" alt="demo"/><br>
+  <img src="img/logo.png" style="max-width: 50%;"><br>
   <h2>Protein Sequence Design Made Easy</h2><br>
-
+  ![Demo Animation](/img/demo.gif?raw=true)
 </div>
 
 [timed-design](https://github.com/wells-wood-research/timed-design) is a library to use protein sequence design models and analyse predictions. We feature retrained Keras models for novel models (**TIMED** and **TIMED-rotamer**) as well as re-implementations of well known models for which code or model are not intuitively available (**ProDCoNN**, **DenseCPD**, **DenseNet**). 
