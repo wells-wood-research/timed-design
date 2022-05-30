@@ -2,7 +2,7 @@
   <img src="img/logo.png" height="50%" width="50%"><br>
   <h2>Protein Sequence Design Made Easy</h2><br>
   
-![Demo Animation](img/demo.gif?raw=true)
+![Demo Animation](https://raw.githubusercontent.com/universvm/timed-gif/main/demo.gif)
 
 </div>
 
