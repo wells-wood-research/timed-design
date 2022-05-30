@@ -69,13 +69,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--output_analysis",
-        type=bool,
         action='store_true',
         help="Whether to output analysis graphs.",
     )
     parser.add_argument(
         "--predict_rotamers",
-        type=bool,
         action='store_true',
         help="Whether model outputs predictions for 338 rotamers (True) or 20 residues (False).",
     )
