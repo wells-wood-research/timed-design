@@ -385,7 +385,8 @@ def load_dataset_and_predict(
         List of tuples with the order
         [... (pdb_code, chain_id, residue_id,  residue_label, encoded_residue) ...]
     """
-    print(f"Running model on {'338 rotamers' if predict_rotamers else '20 residues'}")
+    n_classes = 338 if predict_rotamers else 20
+    print(f"Running model on {n_classes} classes. Rotamer Mode is {predict_rotamers}")
     # Get list of banned pdbs from the benchmark:
     if blacklist:
         filter_pdb_list = get_pdb_keys_to_filter(blacklist)

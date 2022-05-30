@@ -2,5 +2,5 @@ python3 predict.py --path_to_dataset /scratch/timed_dataset/benchmark_set.hdf5 -
 python3 predict.py --path_to_dataset /scratch/timed_dataset/benchmark_set.hdf5 --path_to_model /scratch/timed_dataset/models/TIMED_rotamer_balanced.h5 --batch_size 500 --predict_rotamers True
 python3 predict.py --path_to_dataset /scratch/timed_dataset/benchmark_set.hdf5 --path_to_model /scratch/timed_dataset/models/TIMED_rotamer_not_so_deep.h5 --batch_size 500 --predict_rotamers True
 python3 predict.py --path_to_dataset /scratch/timed_dataset/benchmark_set.hdf5 --path_to_model /scratch/timed_dataset/models/TIMED_rotamer_deep.h5 --batch_size 500 --predict_rotamers True
-python3 predict.py --path_to_dataset /scratch/timed_dataset/benchmark_set.hdf5 --path_to_model /scratch/timed_dataset/models/TIMED_Deep.h5 --batch_size 500 --predict_rotamers False
-python3 predict.py --path_to_dataset /scratch/timed_dataset/benchmark_set.hdf5 --path_to_model /scratch/timed_dataset/models/TIMED_not_so_deep.h5 --batch_size 500 --predict_rotamers False
+python3 predict.py --path_to_dataset /scratch/timed_dataset/benchmark_set.hdf5 --path_to_model /scratch/timed_dataset/models/TIMED_Deep.h5 --batch_size 500
+python3 predict.py --path_to_dataset /scratch/timed_dataset/benchmark_set.hdf5 --path_to_model /scratch/timed_dataset/models/TIMED_not_so_deep.h5 --batch_size 500
