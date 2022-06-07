@@ -1,53 +1,15 @@
 import argparse
-from itertools import repeat
-from multiprocessing import Pool
 from pathlib import Path
 
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
 
-from utils.sampling_utils import apply_temp_to_probs, sample_from_sequences, save_as
+from utils.sampling_utils import apply_temp_to_probs, sample_with_multiprocessing, save_as
 from utils.utils import (
     extract_sequence_from_pred_matrix,
     get_rotamer_codec,
     load_datasetmap,
 )
-
-
-def sample_with_multiprocessing(
-    workers, pdb_codes, sample_n, pdb_to_probability, flat_categories
-):
-    """
-
-    Parameters
-    ----------
-    workers
-    pdb_codes
-    sample_n
-    pdb_to_probability
-    flat_categories
-
-    Returns
-    -------
-
-    """
-    with Pool(processes=workers) as p:
-        pdb_to_sample_dict_list = p.starmap(
-            sample_from_sequences,
-            zip(
-                pdb_codes,
-                repeat(sample_n),
-                repeat(pdb_to_probability),
-                repeat(flat_categories),
-            ),
-        )
-        p.close()
-    # Flatten dictionary:
-    pdb_to_sample = {}
-    for curr_dict in pdb_to_sample_dict_list:
-        if curr_dict is not None:
-            pdb_to_sample.update(curr_dict)
-    return pdb_to_sample
 
 
 def main_sample(args):

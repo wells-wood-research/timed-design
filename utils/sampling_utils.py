@@ -1,5 +1,7 @@
 import json
 import typing as t
+from itertools import repeat
+from multiprocessing import Pool
 
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
@@ -157,3 +159,39 @@ def apply_temp_to_probs(probs: np.ndarray, t: int = 1.0):
     probs = np.array(probs) ** (1 / t)
     p_sum = np.sum(probs, axis=1)
     return probs / p_sum[:, None]
+
+
+def sample_with_multiprocessing(
+    workers, pdb_codes, sample_n, pdb_to_probability, flat_categories
+):
+    """
+
+    Parameters
+    ----------
+    workers
+    pdb_codes
+    sample_n
+    pdb_to_probability
+    flat_categories
+
+    Returns
+    -------
+
+    """
+    with Pool(processes=workers) as p:
+        pdb_to_sample_dict_list = p.starmap(
+            sample_from_sequences,
+            zip(
+                pdb_codes,
+                repeat(sample_n),
+                repeat(pdb_to_probability),
+                repeat(flat_categories),
+            ),
+        )
+        p.close()
+    # Flatten dictionary:
+    pdb_to_sample = {}
+    for curr_dict in pdb_to_sample_dict_list:
+        if curr_dict is not None:
+            pdb_to_sample.update(curr_dict)
+    return pdb_to_sample
