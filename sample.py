@@ -4,8 +4,8 @@ from pathlib import Path
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
 
-from utils.sampling_utils import apply_temp_to_probs, sample_with_multiprocessing, save_as
-from utils.utils import (
+from design_utils.sampling_utils import apply_temp_to_probs, sample_with_multiprocessing, save_as
+from design_utils.utils import (
     extract_sequence_from_pred_matrix,
     get_rotamer_codec,
     load_datasetmap,
