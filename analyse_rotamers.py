@@ -4,8 +4,8 @@ from pathlib import Path
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
 
-from utils.analyse_utils import analyse_with_scwrl, calculate_rotamer_metrics, tag_pdb_with_rot
-from utils.utils import (
+from design_utils.analyse_utils import analyse_with_scwrl, calculate_rotamer_metrics, tag_pdb_with_rot
+from design_utils.utils import (
     extract_sequence_from_pred_matrix,
     get_rotamer_codec,
     load_datasetmap,
