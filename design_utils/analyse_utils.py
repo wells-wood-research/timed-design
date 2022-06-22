@@ -418,11 +418,13 @@ def calculate_rotamer_metrics(
     # Extract predictions:
     for pdb in pdb_to_probability.keys():
         if pdb in pdb_to_rotamer:
-            y_pred += pdb_to_probability[pdb]
-            y_true += pdb_to_rotamer[pdb]
+            if len(pdb_to_probability[pdb]) == len(pdb_to_rotamer[pdb]):
+                y_pred += pdb_to_probability[pdb]
+                y_true += pdb_to_rotamer[pdb]
+            else:
+                print(f"Error with pdb code {pdb} - Length Mismatch")
         else:
             print(f"Error with pdb code {pdb}")
-
     y_pred = np.array(y_pred).reshape(-1, 338)
     y_true = np.array(y_true).flatten()
     y_pred = y_pred[~np.isnan(y_true)]
