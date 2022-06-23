@@ -225,6 +225,23 @@ streamlit run ui.py --  --path_to_models /models --path_to_pdb /pdb --path_to_da
 
 ---Online version coming soon---
 
+
+### 1.5 Install repository with pip
+
+Enter the directory if you are not:
+
+```
+cd timed-design 
+```
+
+Install with pip:
+
+```
+pip install .
+```
+
+
+
 ## 2. Sample Sequences Using Monte Carlo
 
 **File**: `sample.py`
