@@ -16,12 +16,14 @@ from stmol import showmol
 
 from aposteriori.data_prep.create_frame_data_set import Codec, make_frame_dataset
 from sample import main_sample
-from utils.analyse_utils import (
+from design_utils.analyse_utils import (
     calculate_metrics,
     calculate_seq_metrics,
     encode_sequence_to_onehot,
 )
-from utils.utils import get_rotamer_codec, load_dataset_and_predict, lookup_blosum62
+from design_utils.utils import get_rotamer_codec, lookup_blosum62
+from predict import load_dataset_and_predict
+
 
 # {{{ Cached Wrappers
 @st.cache(show_spinner=False)

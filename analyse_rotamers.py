@@ -4,7 +4,11 @@ from pathlib import Path
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
 
-from design_utils.analyse_utils import analyse_with_scwrl, calculate_rotamer_metrics, tag_pdb_with_rot
+from design_utils.analyse_utils import (
+    analyse_with_scwrl,
+    calculate_rotamer_metrics,
+    tag_pdb_with_rot,
+)
 from design_utils.utils import (
     extract_sequence_from_pred_matrix,
     get_rotamer_codec,
@@ -35,7 +39,7 @@ def main(args):
     )
     # Extract PDB codes to be analysed from path:
     pdb_codes = np.unique(datasetmap[:, 0])
-    results_dict, pdb_to_assemblies = tag_pdb_with_rot(
+    wt_results_dict, pdb_to_assemblies = tag_pdb_with_rot(
         args.workers, args.path_to_pdb, pdb_codes
     )
     # Load prediction matrix of model of interest:
@@ -66,38 +70,52 @@ def main(args):
         for pdb in pdb_to_real_sequence.keys():
             pdb_to_real_sequence[pdb] = pdb_to_assemblies[pdb[:4]][pdb[-1]].sequence
     # Calculate Metrics:
+    # - SCWRL_WT
+    # - WT
+    # - Rotamer
+    # - SCWRL_Rotamer
+    # Analyses:
+    # - #1 WT vs Rotamer: Real rotamer accuracy ie. of the predicted rotamers how many are the same as in the real structure
+    # - #2 Rotamer vs SCWRL_Rotamer: Rotamer accuracy from predicted sequence ie. when we predict a rotamer, is it the correct one?
+    # - #3 WT vs SCWRL_Rotamer:
 
-    # - Analysis 1: TIMED_rotamer vs real rotamers from crystal structure
+    # - Analysis 1: WT_SCWRL vs Rotamer from crystal structure
     calculate_rotamer_metrics(
         pdb_to_probability,
-        results_dict,
+        wt_results_dict,
         flat_categories,
-        suffix=f"{model_name}_vs_original",
+        suffix=f"{model_name}_vs_wt",
         output_path=args.output_path,
     )
-
-    # - Analysis 2: TIMED_rotamer vs TIMED_rotamer sequence put through SCWRL
+    # - Analysis 2: Rotamer vs SCWRL_Rotamer (sequence put through SCWRL)
     #     Analyse rotamers with SCWRL (requires SCWRL install)
     #     First the sequence is packed with SCWRL and saved to PDB,
     #     Then, the same metrics as before are calculated and saved
     pdb_to_scores_rot, _ = analyse_with_scwrl(
-        pdb_to_sequence, pdb_to_assemblies, args.output_path, suffix=f"_{model_name}", scwrl_path=args.scwrl_path
+        pdb_to_sequence,
+        pdb_to_assemblies,
+        args.output_path,
+        suffix=f"_{model_name}",
+        scwrl_path=args.scwrl_path,
     )
     model_pdb_codes = np.core.defchararray.add(pdb_codes, f"_{model_name}")
-    model_results_dict, _ = tag_pdb_with_rot(
+    rotamer_model_results_dict, _ = tag_pdb_with_rot(
         args.workers, args.output_path, model_pdb_codes
     )
     calculate_rotamer_metrics(
         pdb_to_probability,
-        model_results_dict,
+        rotamer_model_results_dict,
         flat_categories,
-        suffix=f"{model_name}_vs_pred+scwrl",
+        suffix=f"{model_name}_vs_scwrl_{model_name}",
         output_path=args.output_path,
     )
-
     # - Analysis 3: TIMED_rotamer vs Real sequence from crystal put through SCWRL
     pdb_to_scores_real, _ = analyse_with_scwrl(
-        pdb_to_real_sequence, pdb_to_assemblies, args.output_path, suffix="_scwrl", scwrl_path=args.scwrl_path
+        pdb_to_real_sequence,
+        pdb_to_assemblies,
+        args.output_path,
+        suffix="_scwrl",
+        scwrl_path=args.scwrl_path,
     )
     scwrl_pdb_codes = np.core.defchararray.add(pdb_codes, "_scwrl")
     scwrl_results_dict, _ = tag_pdb_with_rot(
@@ -107,7 +125,7 @@ def main(args):
         pdb_to_probability,
         scwrl_results_dict,
         flat_categories,
-        suffix=f"{model_name}_vs_ori+scwrl",
+        suffix=f"{model_name}_vs_wt_scwrl",
         output_path=args.output_path,
     )
 
@@ -150,7 +168,10 @@ if __name__ == "__main__":
         help="Whether model to import from the old datasetmap (default: False)",
     )
     parser.add_argument(
-        "--scwrl_path", default="/Users/leo/scwrl4/Scwrl4", type=str, help="Path to Scwrl4 software"
+        "--scwrl_path",
+        default="/Users/leo/scwrl4/Scwrl4",
+        type=str,
+        help="Path to Scwrl4 software",
     )
     params = parser.parse_args()
     main(params)
