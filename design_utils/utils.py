@@ -1,16 +1,90 @@
+import gzip
 import sys
 import typing as t
 import warnings
 from itertools import product
 from pathlib import Path
 
+import ampal
 import h5py
 import numpy as np
-from ampal.amino_acids import side_chain_dihedrals, standard_amino_acids
+from ampal.amino_acids import (
+    side_chain_dihedrals,
+    standard_amino_acids,
+    polarity_Zimmerman,
+    residue_charge,
+)
 from numpy import genfromtxt
 
 from aposteriori.config import MAKE_FRAME_DATASET_VER, UNCOMMON_RESIDUE_DICT
 from aposteriori.data_prep.create_frame_data_set import DatasetMetadata
+
+
+def create_residue_map_from_pdb(structure_path: Path) -> (t.List[str], str):
+    """
+    Creates a residue map (similar to dataset map) based on a pdb file.
+
+    Parameters
+    ----------
+    structure_path: Path
+        Path to pdb structure.
+
+    Returns
+    -------
+    residue_map: t.List[str]
+        Residue map of the form ["{res.mol_letter}{res.id} (Chain {chain.id})" ...]
+    merged_sequence: str
+        Full sequence merged into one string. If multiple chains, it squashes all the sequences together.
+    """
+    # Load structure:
+    if structure_path.suffix == ".gz":
+        with gzip.open(str(structure_path), "rb") as inf:
+            pdb_structure = ampal.load_pdb(inf.read().decode(), path=False)
+    else:
+        pdb_structure = ampal.load_pdb(str(structure_path))
+    # Select first state of container:
+    if isinstance(pdb_structure, ampal.AmpalContainer):
+        pdb_structure = pdb_structure[0]
+    residue_map = []
+    merged_sequence = ""
+    for chain in pdb_structure:
+        for res in chain:
+            residue_map.append(f"{res.mol_letter}{res.id} (Chain {chain.id})")
+            merged_sequence += res.mol_letter
+    return residue_map, merged_sequence
+
+
+def convert_seq_to_property(seq: str, property: str) -> t.List[int]:
+    """
+    Converts sequence of residues into property list from either polarity or charge.
+
+    Parameters
+    ----------
+    seq: str
+        Seq of residues
+    property: str
+        Property to be encoded
+
+    Returns
+    -------
+    output: t.List[int]
+        List of ints containing property of interest
+    """
+    accepted_properties = ["polarity", "charge"]
+    assert (
+        property.lower() in accepted_properties
+    ), f"Property {property} not found among {accepted_properties}"
+    res_list = list(seq)
+    if property == "polarity":
+        output_list = []
+        for r in res_list:
+            if r in standard_amino_acids.keys():
+                output_list.append(0 if polarity_Zimmerman[r] < 20 else 1 )
+            else:
+                output_list.append(0)
+        return output_list
+    else:
+        return [residue_charge[r] for r in res_list]
 
 
 def lookup_blosum62(res_true: str, res_prediction: str) -> int:

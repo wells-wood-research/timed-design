@@ -21,7 +21,7 @@ from design_utils.analyse_utils import (
     calculate_seq_metrics,
     encode_sequence_to_onehot,
 )
-from design_utils.utils import get_rotamer_codec, lookup_blosum62
+from design_utils.utils import get_rotamer_codec, lookup_blosum62, create_residue_map_from_pdb, convert_seq_to_property
 from predict import load_dataset_and_predict
 
 
@@ -417,14 +417,14 @@ def _draw_output_section(
         "(", np.array(np.arange(len(selected_dataset_map[:, 2])), dtype=str)
     )
     f_n = np.core.defchararray.add(f_i, ") ")
+    f_n = np.core.defchararray.add(f_n, selected_dataset_map[:, 3])
     f_0 = np.core.defchararray.add(f_n, selected_dataset_map[:, 2])
-    f_1 = np.core.defchararray.add(f_0, " Chain ")
+    f_1 = np.core.defchararray.add(f_0, " (Chain ")
     f_2 = np.core.defchararray.add(f_1, selected_dataset_map[:, 1])
-    f_3 = np.core.defchararray.add(f_2, " ")
-    f_4 = np.core.defchararray.add(f_3, selected_dataset_map[:, 3])
-    datamap_to_idx = dict(zip(f_4, range(len(f_4))))
+    f_3 = np.core.defchararray.add(f_2, ")")
+    datamap_to_idx = dict(zip(f_3, range(len(f_3))))
     option = st.selectbox(
-        "Explore probabilities at specific positions:", (f_4), key="option"
+        "Explore probabilities at specific positions:", (f_3), key="option"
     )
     if "reload" in st.session_state.keys():
         pdb_session2 = show_pdb(selected_pdb[:4], st.session_state.option)
@@ -615,7 +615,7 @@ def _draw_optimisation_section(
     )
 
 
-def _draw_sidebar(all_pdbs: t.List[str]):
+def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
     """
     Draws Sidebar with elements:
         - PDB Code Input
@@ -636,6 +636,7 @@ def _draw_sidebar(all_pdbs: t.List[str]):
         label="Choose your Model",
         options=(
             "TIMED",
+            "TIMED_polar",
             "TIMED_Deep",
             "TIMED_rotamer",
             "TIMED_rotamer_balanced",
@@ -647,6 +648,9 @@ def _draw_sidebar(all_pdbs: t.List[str]):
         ),
         help="To check the performance of each of the models visit: https://github.com/wells-wood-research/timed-design/releases/tag/model",
     )
+    # Add polar settings if model input is polar:
+    placeholder_polar_expander = st.sidebar.empty()
+    placeholder_polar = st.sidebar.empty()
     # Add Advanced settings menu for monte carlo sampling
     with st.sidebar.expander("Advanced Settings"):
         # Not using the sidebar as per https://github.com/streamlit/streamlit/issues/3157
@@ -666,6 +670,16 @@ def _draw_sidebar(all_pdbs: t.List[str]):
     if pdb not in all_pdbs:
         st.sidebar.error("PDB code not found")
         placeholder_run_button.button("Run model", disabled=True, key="4")
+    if model == "TIMED_polar":
+        structure_path = path_to_pdb / pdb[1:3] / (pdb + ".pdb1.gz")
+        residue_map, merged_sequence = create_residue_map_from_pdb(structure_path)
+        polarity_map = convert_seq_to_property(merged_sequence, property="polarity")
+        polarity_map = np.array(polarity_map, dtype=int)
+        residue_map = np.array(residue_map)
+        selected_polar_map = residue_map[polarity_map > 0]
+        placeholder_polar = placeholder_polar.multiselect('Make Polar Residues',residue_map, selected_polar_map)
+    else:
+        placeholder_polar = st.sidebar.empty()
     return (
         model,
         result,
@@ -709,7 +723,7 @@ def main(args):
             temperature_button,
         ),
         (use_montecarlo, sample_n, temperature),
-    ) = _draw_sidebar(all_pdbs)
+    ) = _draw_sidebar(all_pdbs, path_to_pdb)
     # Find selected model
     model_path = path_to_models / (model + ".h5")
     res = list(standard_amino_acids.values())

@@ -12,7 +12,6 @@ networkx==2.8
 numpy==1.22.3
 pandas==1.4.2
 py3Dmol==1.8.0
-pymol==2.6.0a0
 pytest==6.2.5
 requests==2.27.1
 scikit_learn==1.1.1
