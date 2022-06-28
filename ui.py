@@ -1,4 +1,7 @@
 import argparse
+import random
+import string
+import tempfile
 import time
 import typing as t
 from collections import Counter
@@ -21,7 +24,7 @@ from design_utils.analyse_utils import (
     calculate_seq_metrics,
     encode_sequence_to_onehot,
 )
-from design_utils.utils import get_rotamer_codec, lookup_blosum62, create_residue_map_from_pdb, convert_seq_to_property
+from design_utils.utils import get_rotamer_codec, lookup_blosum62, create_residue_map_from_pdb, convert_seq_to_property, modify_pdb_with_input_polarity
 from predict import load_dataset_and_predict
 
 
@@ -68,6 +71,33 @@ def _build_aposteriori_dataset_wrapper(
         )
     return data_path
 
+def _build_aposteriori_dataset_wrapper_polarity(
+    path_to_pdb: Path, pdb_code: str, output_path: Path, polarity_map: np.ndarray, workers: int,
+):
+    output_path = output_path / "polarity"
+    output_path.mkdir(parents=True, exist_ok=True)
+    structure_path = path_to_pdb / pdb_code[1:3] / (pdb_code + ".pdb1.gz")
+    ampal_structure = modify_pdb_with_input_polarity(structure_path, polarity_map)
+    polar_path = output_path / f"{pdb_code}.pdb1"
+    with open(polar_path, "w") as f:
+        f.write(ampal_structure.pdb)
+
+    # pdb_code_rand = pdb_code + "_"+ ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(10))
+    data_path = output_path / (pdb_code + ".hdf5")
+    make_frame_dataset(
+        structure_files=[polar_path],
+        output_folder=output_path,
+        name=pdb_code,
+        frame_edge_length=21.0,
+        voxels_per_side=21,
+        codec=Codec.CNOCBCAQ(),
+        processes=workers,
+        is_pdb_gzipped=False,
+        require_confirmation=False,
+        voxels_as_gaussian=True,
+        voxelise_all_states=False,
+    )
+    return data_path
 
 @st.cache(show_spinner=False)
 def _get_rotamer_codec_wrapper():
@@ -161,8 +191,8 @@ def show_pdb(pdb_code, label_res: t.Optional[str] = None):
     # loop_resid_dict = {sw1_name: sw1_resids, sw2_name: sw2_resids}
     if label_res:
         xyzview.setStyle({"cartoon": {"color": "white", "opacity": 0.5}})
-        _, resn, _, chain, _ = label_res.split(" ")
-        resn = int(resn)
+        _, resn, _, chain, = label_res.split(" ")
+        resn = int(resn[-1])
         zoom_residue = [
             {"resi": int(resn)},
             {
@@ -680,6 +710,8 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
         placeholder_polar = placeholder_polar.multiselect('Make Polar Residues',residue_map, selected_polar_map)
     else:
         placeholder_polar = st.sidebar.empty()
+        polarity_map = None
+        residue_map = None
     return (
         model,
         result,
@@ -690,6 +722,7 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
             sample_n_button,
             temperature_button,
         ),
+        (polarity_map, residue_map),
         (use_montecarlo, sample_n, temperature),
     )
 # }}}
@@ -722,6 +755,7 @@ def main(args):
             sample_n_button,
             temperature_button,
         ),
+        (polarity_map, residue_map),
         (use_montecarlo, sample_n, temperature),
     ) = _draw_sidebar(all_pdbs, path_to_pdb)
     # Find selected model
@@ -732,6 +766,7 @@ def main(args):
     if result or "reload" in st.session_state.keys():
         # When user clicks on calculate, check that the model is a rotamer model or not:
         rotamer_mode = True if "rotamer" in model else False
+        polar_mode = True if "polar" in model else False
         if rotamer_mode:
             _, flat_categories = _get_rotamer_codec_wrapper()
         else:
@@ -750,15 +785,28 @@ def main(args):
             )
         with st.spinner("Voxelising Protein Structure..."):
             t0_apo = time.time()
-            dataset = _build_aposteriori_dataset_wrapper(
-                path_to_pdb=path_to_pdb,
-                pdb_code=pdb,
-                output_path=path_to_data,
-                workers=args.workers,
-            )
+            if polar_mode:
+                dataset = _build_aposteriori_dataset_wrapper_polarity(
+                    path_to_pdb=path_to_pdb,
+                    pdb_code=pdb,
+                    output_path=path_to_data,
+                    polarity_map=polarity_map,
+                    workers=args.workers,
+                )
+            else:
+                dataset = _build_aposteriori_dataset_wrapper(
+                    path_to_pdb=path_to_pdb,
+                    pdb_code=pdb,
+                    output_path=path_to_data,
+                    workers=args.workers,
+                )
             t1_apo = time.time()
         # Use model to predict:
         t0 = time.time()
+        if polar_mode:
+            model_suffix = pdb + "_polar_" + ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(5))
+        else:
+            model_suffix =  pdb
         (
             flat_dataset_map,
             pdb_to_sequence,
@@ -766,7 +814,7 @@ def main(args):
             pdb_to_real_sequence,
             _,
             _,
-        ) = predict_dataset(dataset, model_path, rotamer_mode, pdb)
+        ) = predict_dataset(dataset, model_path, rotamer_mode, model_suffix)
         t1 = time.time()
         time_string = time.strftime("%M m %S s", time.gmtime(t1 - t0))
         apo_time_string = time.strftime("%M m %S s", time.gmtime(t1_apo - t0_apo))

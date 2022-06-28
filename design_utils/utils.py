@@ -20,6 +20,42 @@ from aposteriori.config import MAKE_FRAME_DATASET_VER, UNCOMMON_RESIDUE_DICT
 from aposteriori.data_prep.create_frame_data_set import DatasetMetadata
 
 
+def load_pdb_from_path(structure_path) -> ampal.Assembly:
+    # Load structure:
+    if structure_path.suffix == ".gz":
+        with gzip.open(str(structure_path), "rb") as inf:
+            pdb_structure = ampal.load_pdb(inf.read().decode(), path=False)
+    else:
+        pdb_structure = ampal.load_pdb(str(structure_path))
+    # Select first state of container:
+    if isinstance(pdb_structure, ampal.AmpalContainer):
+        pdb_structure = pdb_structure[0]
+    return pdb_structure
+
+
+def modify_pdb_with_input_polarity(structure_path: Path, polarity_map: np.ndarray):
+    polarity_dict = {0: "A", 1: "K"}
+    pdb_structure = load_pdb_from_path(structure_path)
+    count = 0
+    merged_sequence = ""
+    for chain in pdb_structure:
+        for res in chain:
+            r = res.mol_letter
+            if r in standard_amino_acids.keys():
+                polarity = 0 if polarity_Zimmerman[r] < 20 else 1
+            else:
+                polarity = 0
+            if polarity_map[count] != polarity:
+                res.mol_letter = polarity_dict[polarity_map[count]]
+                # res.mol_code = standard_amino_acids[polarity_dict[polarity_map[count]]]
+            merged_sequence += res.mol_letter
+            count += 1
+    new_polarity_map = convert_seq_to_property(merged_sequence, property="polarity")
+    np.testing.assert_array_equal(new_polarity_map, polarity_map, err_msg='Polarity maps differ.')
+
+    return pdb_structure
+
+
 def create_residue_map_from_pdb(structure_path: Path) -> (t.List[str], str):
     """
     Creates a residue map (similar to dataset map) based on a pdb file.
@@ -36,15 +72,7 @@ def create_residue_map_from_pdb(structure_path: Path) -> (t.List[str], str):
     merged_sequence: str
         Full sequence merged into one string. If multiple chains, it squashes all the sequences together.
     """
-    # Load structure:
-    if structure_path.suffix == ".gz":
-        with gzip.open(str(structure_path), "rb") as inf:
-            pdb_structure = ampal.load_pdb(inf.read().decode(), path=False)
-    else:
-        pdb_structure = ampal.load_pdb(str(structure_path))
-    # Select first state of container:
-    if isinstance(pdb_structure, ampal.AmpalContainer):
-        pdb_structure = pdb_structure[0]
+    pdb_structure = load_pdb_from_path(structure_path)
     residue_map = []
     merged_sequence = ""
     for chain in pdb_structure:
