@@ -28,8 +28,8 @@ from sklearn.metrics import (
 from tqdm import tqdm
 
 from aposteriori.data_prep.create_frame_data_set import _fetch_pdb
-from utils.scwrl_utils import pack_side_chains_scwrl
-from utils.utils import get_rotamer_codec
+from design_utils.scwrl_utils import pack_side_chains_scwrl
+from design_utils.utils import get_rotamer_codec
 
 
 def calculate_seq_metrics(seq: str) -> t.Tuple[float, float, float, float]:
