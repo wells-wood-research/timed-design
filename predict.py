@@ -60,6 +60,9 @@ def load_dataset_and_predict(
         List of tuples with the order
         [... (pdb_code, chain_id, residue_id,  residue_label, encoded_residue) ...]
     """
+    # Import top3 accuracy:
+    tf.keras.utils.get_custom_objects()["top_3_cat_acc"] = top_3_cat_acc
+
     n_classes = 338 if predict_rotamers else 20
     print(f"Running model on {n_classes} classes. Rotamer Mode is {predict_rotamers}")
     # Get list of banned pdbs from the benchmark:
@@ -171,8 +174,6 @@ def load_dataset_and_predict(
 
 
 def main(args):
-    # Import top3 accuracy:
-    tf.keras.utils.get_custom_objects()["top_3_cat_acc"] = top_3_cat_acc
     # Sanitise paths
     args.path_to_dataset = Path(args.path_to_dataset)
     args.path_to_model = Path(args.path_to_model)
