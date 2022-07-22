@@ -522,9 +522,10 @@ def calculate_rotamer_metrics(
     with open(output_path / f"results_{suffix}.txt", "w") as f:
         f.write(f"Metrics AUC_OVR: {auc_ovr}\n")
         f.write(f"Metrics AUC_OVO: {auc_ovo}\n")
-        f.write(f"Metrics Macro-Precision: {precision} Macro-Recall: {recall}\n")
+        f.write(f"Metrics Macro-Precision: {precision}")
+        f.write(f"Metrics Macro-Recall: {recall}\n")
         f.write(
-            f"Accuracy: {accuracy}, accuracy_2: {accuracy_2}, accuracy_3: {accuracy_3}, accuracy_4: {accuracy_4}, accuracy_5: {accuracy_5}, precision: {precision}, recall: {recall}\n"
+            f"Accuracy: {accuracy} \naccuracy_2: {accuracy_2}\naccuracy_3: {accuracy_3} \naccuracy_4: {accuracy_4}\naccuracy_5: {accuracy_5}\nprecision: {precision}\nrecall: {recall}\n"
         )
         f.write("Report:\n")
         f.write(f"{report}\n")
@@ -685,6 +686,11 @@ def tag_pdb_with_rot(
             ),
         )
         p.close()
+
+    # results_dict_list = []
+    # for pdb in pdb_codes:
+    #     results_dict= _tag_pdb_with_rot(pdb, path_to_pdb)
+    #     results_dict_list.append(results_dict)
     # Flatten dictionary:
     for curr_dict in results_dict_list:
         curr_res_dict, curr_assembly_dict = curr_dict
