@@ -12,7 +12,7 @@ def main(args):
         output_dict = {}
         for t in args.temperature:
             # Compose metrics and solubility files:
-            metrics_file = args.input_path / f"{model}_temp_{t}_n_200_metrics.csv" # TODO: deal with original n and sample n
+            metrics_file = args.input_path / f"{model}_temp_{t}_n_100_metrics.csv" # TODO: deal with original n and sample n
             # Check paths exist:
             assert metrics_file.exists(), f"Metrics file {metrics_file} does not exist."
             # Load files into an array:
@@ -48,28 +48,32 @@ if __name__ == "__main__":
         type=list,
         nargs="+",
         default=[
-            "TIMED_rot",
+            "TIMED_Deep",
+            "TIMED_rotamer_balanced_rot",
+            "TIMED_rotamer_deep_rot",
+            "TIMED_rotamer_not_so_deep_rot",
+            "TIMED_rotamer_rot",
             "TIMED",
         ],
-        help="Which models to analyse (default: TIMED_rot, TIMED).",
+        help="Which models to analyse (default: all).",
     )
     parser.add_argument(
         "--temperature",
         type=list,
         nargs="+",
-        default=[0.1, 0.5, 2.0, 5.0],
+        default=[0.2, 0.4, 0.6, 0.8],
         help="Which Temperatures to analyse (default: 0.1, 0.5, 2.0, 5.0).",
     )
     parser.add_argument(
         "--sample_n",
         type=int,
-        default=15,
+        default=-1,
         help="Number of samples to select (default: 15).",
     )
     parser.add_argument(
         "--pdb_n",
         type=int,
-        default=10,
+        default=-1,
         help="Number of pdbs to select (default: 10).",
     )
     parser.add_argument(
