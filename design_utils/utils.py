@@ -46,12 +46,14 @@ def modify_pdb_with_input_polarity(structure_path: Path, polarity_map: np.ndarra
             else:
                 polarity = 0
             if polarity_map[count] != polarity:
+                res.mol_code = standard_amino_acids[polarity_dict[polarity_map[count]]]
                 res.mol_letter = polarity_dict[polarity_map[count]]
-                # res.mol_code = standard_amino_acids[polarity_dict[polarity_map[count]]]
             merged_sequence += res.mol_letter
             count += 1
     new_polarity_map = convert_seq_to_property(merged_sequence, property="polarity")
-    np.testing.assert_array_equal(new_polarity_map, polarity_map, err_msg='Polarity maps differ.')
+    np.testing.assert_array_equal(
+        new_polarity_map, polarity_map, err_msg="Polarity maps differ."
+    )
 
     return pdb_structure
 
@@ -107,7 +109,7 @@ def convert_seq_to_property(seq: str, property: str) -> t.List[int]:
         output_list = []
         for r in res_list:
             if r in standard_amino_acids.keys():
-                output_list.append(0 if polarity_Zimmerman[r] < 20 else 1 )
+                output_list.append(0 if polarity_Zimmerman[r] < 20 else 1)
             else:
                 output_list.append(0)
         return output_list
@@ -664,6 +666,19 @@ def save_outputs_to_file(
     # Output model predictions:
     with open(f"{model_name}.csv", "a") as f:
         np.savetxt(f, predictions, delimiter=",")
+
+
+def create_map_alphanumeric_code(polarity_map, k=32):
+    # Create alphanumeric code based on polarity map:
+    import random, string
+
+    seed_map = "1"
+    for i in polarity_map:
+        seed_map += str(i)
+    seed_map = int(seed_map)
+    random.seed(seed_map)
+    map_code = "".join(random.choices(string.ascii_letters + string.digits, k=k))
+    return map_code
 
 
 blosum62 = {
