@@ -91,7 +91,7 @@ def _build_aposteriori_dataset_wrapper_polarity(
     structure_path = path_to_pdb / pdb_code[1:3] / (pdb_code + ".pdb1.gz")
     ampal_structure = modify_pdb_with_input_polarity(structure_path, polarity_map)
     # Create alphanumeric code based on polarity map:
-    map_code = create_map_alphanumeric_code(polarity_map=polarity_map)
+    map_code = create_map_alphanumeric_code(property_map=polarity_map)
     polar_path = output_path / f"{pdb_code + map_code}.pdb1"
     # Save modified pdb to file:
     with open(polar_path, "w") as f:
@@ -742,9 +742,6 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
         selected_polar_map = np.zeros(len(residue_map), dtype=int)
         selected_polar_map[idx_positives] = 1
         polarity_map = selected_polar_map
-        # if "reload" not in st.session_state:
-        #     st.session_state.reload = True
-        # st.write(selected_polar_map)
     else:
         placeholder_polar = st.sidebar.empty()
         polarity_map = None
@@ -845,7 +842,7 @@ def main(args):
         # Use model to predict:
         t0 = time.time()
         if polar_mode:
-            model_suffix = pdb + "_polar_" + create_map_alphanumeric_code(polarity_map=polarity_map)
+            model_suffix = pdb + "_polar_" + create_map_alphanumeric_code(property_map=polarity_map)
         else:
             model_suffix = pdb
         (
