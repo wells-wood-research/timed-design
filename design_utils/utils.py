@@ -46,8 +46,8 @@ def load_pdb_from_path(structure_path: Path) -> ampal.Assembly:
     return pdb_structure
 
 
-def modify_pdb_with_input_polarity(
-    structure_path: Path, polarity_map: np.ndarray
+def modify_pdb_with_input_property(
+    structure_path: Path, property_map: np.ndarray, property: str
 ) -> ampal.Assembly:
     """
     Modifies input structure with polarity. A bit hacky.
@@ -58,7 +58,7 @@ def modify_pdb_with_input_polarity(
     ----------
     structure_path: Path
         Path to structures
-    polarity_map: np.ndarray
+    property_map: np.ndarray
         Property map
 
     Returns
@@ -67,7 +67,12 @@ def modify_pdb_with_input_polarity(
         Ampal structure with modified letter code
 
     """
-    polarity_dict = {0: "A", 1: "K"}
+    property = property.lower()
+    accepted_properties = ["polarity", "charge"]
+    assert (
+        property in accepted_properties
+    ), f"Property {property} not found among {accepted_properties}"
+    property_dict = {0: "A", 1: "K", -1: "D"}
     pdb_structure = load_pdb_from_path(structure_path)
     count = 0
     merged_sequence = ""
@@ -75,17 +80,20 @@ def modify_pdb_with_input_polarity(
         for res in chain:
             r = res.mol_letter
             if r in standard_amino_acids.keys():
-                polarity = 0 if polarity_Zimmerman[r] < 20 else 1
+                if property == "polarity":
+                    res_property = 0 if polarity_Zimmerman[r] < 20 else 1
+                else:
+                    res_property = residue_charge[r]
             else:
-                polarity = 0
-            if polarity_map[count] != polarity:
-                res.mol_code = standard_amino_acids[polarity_dict[polarity_map[count]]]
-                res.mol_letter = polarity_dict[polarity_map[count]]
+                res_property = 0
+            if property_map[count] != res_property:
+                res.mol_code = standard_amino_acids[property_dict[property_map[count]]]
+                res.mol_letter = property_dict[property_map[count]]
             merged_sequence += res.mol_letter
             count += 1
-    new_polarity_map = convert_seq_to_property(merged_sequence, property="polarity")
+    new_property_map = convert_seq_to_property(merged_sequence, property=property)
     np.testing.assert_array_equal(
-        new_polarity_map, polarity_map, err_msg="Polarity maps differ."
+        new_property_map, property_map, err_msg="Property maps differ."
     )
 
     return pdb_structure
@@ -723,7 +731,7 @@ def create_map_alphanumeric_code(property_map: np.ndarray, k: int = 32) -> str:
     for i in property_map:
         # Dealing with negative charge:
         if i < 0:
-            seed_map += 2
+            seed_map += str(2)
         else:
             seed_map += str(i)
     seed_map = int(seed_map)

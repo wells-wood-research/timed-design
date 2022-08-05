@@ -29,8 +29,8 @@ from design_utils.utils import (
     lookup_blosum62,
     create_residue_map_from_pdb,
     convert_seq_to_property,
-    modify_pdb_with_input_polarity,
-create_map_alphanumeric_code,
+    modify_pdb_with_input_property,
+    create_map_alphanumeric_code,
 )
 from predict import load_dataset_and_predict
 
@@ -79,19 +79,22 @@ def _build_aposteriori_dataset_wrapper(
     return data_path
 
 
-def _build_aposteriori_dataset_wrapper_polarity(
+def _build_aposteriori_dataset_wrapper_property(
     path_to_pdb: Path,
     pdb_code: str,
     output_path: Path,
-    polarity_map: np.ndarray,
+    property_map: np.ndarray,
     workers: int,
+    property: str,
 ):
-    output_path = output_path / "polarity"
+    output_path = output_path / property
     output_path.mkdir(parents=True, exist_ok=True)
     structure_path = path_to_pdb / pdb_code[1:3] / (pdb_code + ".pdb1.gz")
-    ampal_structure = modify_pdb_with_input_polarity(structure_path, polarity_map)
+    ampal_structure = modify_pdb_with_input_property(
+        structure_path, property_map, property=property
+    )
     # Create alphanumeric code based on polarity map:
-    map_code = create_map_alphanumeric_code(property_map=polarity_map)
+    map_code = create_map_alphanumeric_code(property_map=property_map)
     polar_path = output_path / f"{pdb_code + map_code}.pdb1"
     # Save modified pdb to file:
     with open(polar_path, "w") as f:
@@ -105,7 +108,7 @@ def _build_aposteriori_dataset_wrapper_polarity(
             name=pdb_code + map_code,
             frame_edge_length=21.0,
             voxels_per_side=21,
-            codec=Codec.CNOCBCAP(),
+            codec=Codec.CNOCBCAP() if property == "polarity" else Codec.CNOCBCAQ(),
             processes=workers,
             is_pdb_gzipped=False,
             require_confirmation=False,
@@ -113,6 +116,45 @@ def _build_aposteriori_dataset_wrapper_polarity(
             voxelise_all_states=False,
         )
     return data_path
+
+
+#
+# def _build_aposteriori_dataset_wrapper_charge(
+#     path_to_pdb: Path,
+#     pdb_code: str,
+#     output_path: Path,
+#     charge_map: np.ndarray,
+#     workers: int,
+# ):
+#     output_path = output_path / "charge"
+#     output_path.mkdir(parents=True, exist_ok=True)
+#     structure_path = path_to_pdb / pdb_code[1:3] / (pdb_code + ".pdb1.gz")
+#     ampal_structure = modify_pdb_with_input_property(
+#         structure_path, charge_map, property="charge"
+#     )
+#     # Create alphanumeric code based on polarity map:
+#     map_code = create_map_alphanumeric_code(property_map=charge_map)
+#     charge_path = output_path / f"{pdb_code + map_code}.pdb1"
+#     # Save modified pdb to file:
+#     with open(charge_path, "w") as f:
+#         f.write(ampal_structure.pdb)
+#     # Create dataset:
+#     data_path = output_path / (pdb_code + map_code + ".hdf5")
+#     if not data_path.exists():
+#         make_frame_dataset(
+#             structure_files=[charge_path],
+#             output_folder=output_path,
+#             name=pdb_code + map_code,
+#             frame_edge_length=21.0,
+#             voxels_per_side=21,
+#             codec=Codec.CNOCBCAQ(),
+#             processes=workers,
+#             is_pdb_gzipped=False,
+#             require_confirmation=False,
+#             voxels_as_gaussian=True,
+#             voxelise_all_states=False,
+#         )
+#     return data_path
 
 
 @st.cache(show_spinner=False)
@@ -691,6 +733,7 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
         options=(
             "TIMED",
             "TIMED_polar",
+            "TIMED_charge",
             "TIMED_Deep",
             "TIMED_rotamer",
             "TIMED_rotamer_balanced",
@@ -703,8 +746,11 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
         help="To check the performance of each of the models visit: https://github.com/wells-wood-research/timed-design/releases/tag/model",
     )
     # Add polar settings if model input is polar:
-    placeholder_polar_expander = st.sidebar.empty()
-    placeholder_polar = st.sidebar.empty()
+    placeholder_property_expander = st.sidebar.empty()
+    placeholder_property = st.sidebar.empty()
+    # Add extra menu for charge model
+    if model == "TIMED_charge":
+        placeholder_property2 = st.sidebar.empty()
     # Add Advanced settings menu for monte carlo sampling
     with st.sidebar.expander("Advanced Settings"):
         # Not using the sidebar as per https://github.com/streamlit/streamlit/issues/3157
@@ -724,27 +770,47 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
     if pdb not in all_pdbs:
         st.sidebar.error("PDB code not found")
         placeholder_run_button.button("Run model", disabled=True, key="4")
-    if model == "TIMED_polar":
+    if model == "TIMED_polar" or model == "TIMED_charge":
         structure_path = (
             path_to_pdb / pdb[1:3] / (pdb + ".pdb1.gz")
         )  # This is the problem. We need to override this
         residue_map, merged_sequence = create_residue_map_from_pdb(structure_path)
-        polarity_map = convert_seq_to_property(merged_sequence, property="polarity")
-        polarity_map = np.array(polarity_map, dtype=int)
+        model_property = "polarity" if model == "TIMED_polar" else "charge"
+        property_map = convert_seq_to_property(merged_sequence, property=model_property)
+        property_map = np.array(property_map, dtype=int)
         residue_map = np.array(residue_map)
-        selected_polar_map = residue_map[polarity_map > 0]
-        placeholder_polar = placeholder_polar.multiselect(
-            "Make Polar Residues", residue_map, selected_polar_map
-        )
-        # Find all indeces selected by the user:
-        idx_positives = np.where(np.in1d(residue_map, placeholder_polar))[0]
-        # Convert to polar map:
-        selected_polar_map = np.zeros(len(residue_map), dtype=int)
-        selected_polar_map[idx_positives] = 1
-        polarity_map = selected_polar_map
+        if model == "TIMED_polar":
+            selected_property_map = residue_map[property_map > 0]
+            placeholder_property = placeholder_property.multiselect(
+                "Make Polar Residues", residue_map, selected_property_map
+            )
+            # Find all indeces selected by the user:
+            idx_positives = np.where(np.in1d(residue_map, placeholder_property))[0]
+            # Convert to polar map:
+            selected_property_map = np.zeros(len(residue_map), dtype=int)
+            selected_property_map[idx_positives] = 1
+            property_map = selected_property_map
+        if model == "TIMED_charge":
+
+            positive_property_map = residue_map[property_map > 0]
+            placeholder_property = placeholder_property.multiselect(
+                "Make Positive Charge Residues", residue_map, positive_property_map
+            )
+            negative_property_map = residue_map[property_map < 0]
+            placeholder_property2 = placeholder_property2.multiselect(
+                "Make Negative Charge Residues", residue_map, negative_property_map
+            )
+            # Find all indeces selected by the user:
+            idx_positives = np.where(np.in1d(residue_map, placeholder_property))[0]
+            idx_negatives = np.where(np.in1d(residue_map, placeholder_property2))[0]
+            # Convert to polar map:
+            selected_property_map = np.zeros(len(residue_map), dtype=int)
+            selected_property_map[idx_positives] = 1
+            selected_property_map[idx_negatives] = -1
+            property_map = selected_property_map
     else:
-        placeholder_polar = st.sidebar.empty()
-        polarity_map = None
+        placeholder_property = st.sidebar.empty()
+        property_map = None
         residue_map = None
     return (
         model,
@@ -756,7 +822,7 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
             sample_n_button,
             temperature_button,
         ),
-        (polarity_map, placeholder_polar, residue_map),
+        (property_map, placeholder_property, residue_map),
         (use_montecarlo, sample_n, temperature),
     )
 
@@ -802,7 +868,9 @@ def main(args):
     if result or "reload" in st.session_state.keys():
         # When user clicks on calculate, check that the model is a rotamer model or not:
         rotamer_mode = True if "rotamer" in model else False
-        polar_mode = True if "polar" in model else False
+        property_mode = (
+            "polar" if "polar" in model else "charge" if "charge" in model else False
+        )
         if rotamer_mode:
             _, flat_categories = _get_rotamer_codec_wrapper()
         else:
@@ -821,15 +889,14 @@ def main(args):
             )
         with st.spinner("Voxelising Protein Structure..."):
             t0_apo = time.time()
-            if polar_mode:
-                st.write(placeholder_polar)
-                st.write(polarity_map)
-                dataset = _build_aposteriori_dataset_wrapper_polarity(
+            if property_mode:
+                dataset = _build_aposteriori_dataset_wrapper_property(
                     path_to_pdb=path_to_pdb,
                     pdb_code=pdb,
                     output_path=path_to_data,
-                    polarity_map=polarity_map,
+                    property_map=polarity_map,
                     workers=args.workers,
+                    property=property_mode,
                 )
             else:
                 dataset = _build_aposteriori_dataset_wrapper(
@@ -841,8 +908,12 @@ def main(args):
             t1_apo = time.time()
         # Use model to predict:
         t0 = time.time()
-        if polar_mode:
-            model_suffix = pdb + "_polar_" + create_map_alphanumeric_code(property_map=polarity_map)
+        if property_mode:
+            model_suffix = (
+                pdb
+                + f"_{property_mode}_"
+                + create_map_alphanumeric_code(property_map=polarity_map)
+            )
         else:
             model_suffix = pdb
         (
