@@ -869,7 +869,7 @@ def main(args):
         # When user clicks on calculate, check that the model is a rotamer model or not:
         rotamer_mode = True if "rotamer" in model else False
         property_mode = (
-            "polar" if "polar" in model else "charge" if "charge" in model else False
+            "polarity" if "polar" in model else "charge" if "charge" in model else False
         )
         if rotamer_mode:
             _, flat_categories = _get_rotamer_codec_wrapper()
