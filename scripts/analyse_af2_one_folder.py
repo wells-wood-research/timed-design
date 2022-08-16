@@ -127,7 +127,4 @@ if __name__ == "__main__":
     parser.add_argument("--workers", type=int, help="Path to input file")
     # Launch PyMol:
     params = parser.parse_args()
-    pymol.pymol_argv = ["pymol", "-qc"]
-    pymol.finish_launching()
-    cmd = pymol.cmd
     main(params)
