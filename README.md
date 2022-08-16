@@ -1,6 +1,8 @@
 <div align="center">
   <img src="img/logo.png" height="50%" width="50%"><br>
   <h2>Protein Sequence Design Made Easy</h2><br>
+<a href="https://zenodo.org/badge/latestdoi/427622709"><img src="https://zenodo.org/badge/427622709.svg" alt="DOI"></a>
+
   
 ![Demo Animation](https://raw.githubusercontent.com/universvm/timed-gif/main/demo.gif)
 
