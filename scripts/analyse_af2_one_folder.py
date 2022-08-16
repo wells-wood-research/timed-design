@@ -67,7 +67,7 @@ def main(args):
             curr_pdb = ampal.load_pdb(str(curr_path))
             if isinstance(curr_pdb, ampal.AmpalContainer):
                 curr_pdb = curr_pdb[0]
-            pdb_path = args.pdb_path / (pdb[:4] + ".pdb")
+            pdb_path = args.pdb_path / pdb[1:3] / (pdb[:4] + ".pdb")
             # Load reference pdb structures to sanitise input:
             reference_pdb = ampal.load_pdb(str(pdb_path))
             if isinstance(reference_pdb, ampal.AmpalContainer):
