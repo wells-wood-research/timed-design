@@ -124,6 +124,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--af2_results_path", type=str, help="Path to input file")
     parser.add_argument("--pdb_path", type=str, help="Path to input file")
+    parser.add_argument("--workers", type=int, help="Path to input file")
     # Launch PyMol:
     params = parser.parse_args()
     pymol.pymol_argv = ["pymol", "-qc"]
