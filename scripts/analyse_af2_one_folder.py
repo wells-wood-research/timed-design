@@ -77,7 +77,7 @@ def main(args):
                 reference_pdb.sequences[0]
             ), f"Length of reference sequence and current pdb do not match"
             # Calculate accuracy:
-            seq_accuracy = metrics.accuracy_score(list(curr_pdb.sequences[0]), reference_pdb.sequences[0])
+            seq_accuracy = metrics.accuracy_score(list(curr_pdb.sequences[0]), list(reference_pdb.sequences[0]))
             curr_results = [model, pdb, n, temp, seq_accuracy]
             # Required purely to avoid bugs on files being corrupted:
             with tempfile.NamedTemporaryFile(
