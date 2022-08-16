@@ -61,7 +61,7 @@ def main(args):
     all_af2_paths = list(args.af2_results_path.glob("*.pdb"))
     # TODO: Add multiprocessing?
     for i, curr_path in enumerate(all_af2_paths):
-        model, pdb, temp, n, af2_model = curr_path.name.split("_")
+        model, pdb, temp, n, af2_model = curr_path.name.split("_", maxsplit=4)
         if "ranked" in af2_model:
             # Load af2 pdb structures to sanitise input:
             curr_pdb = ampal.load_pdb(str(curr_path))
