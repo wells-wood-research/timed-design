@@ -75,7 +75,7 @@ def main(args):
             # Sanity checks:
             assert len(curr_pdb.sequences[0]) == len(
                 reference_pdb.sequences[0]
-            ), f"Length of reference sequence and current pdb do not match for {pdb}: {len(curr_pdb.sequences[0])} vs {reference_pdb.sequences[0]}"
+            ), f"Length of reference sequence and current pdb do not match for {pdb}: {len(curr_pdb.sequences[0])} vs {len(reference_pdb.sequences[0])}"
             # Calculate accuracy:
             seq_accuracy = metrics.accuracy_score(list(curr_pdb.sequences[0]), list(reference_pdb.sequences[0]))
             curr_results = [model, pdb, n, temp, seq_accuracy]
