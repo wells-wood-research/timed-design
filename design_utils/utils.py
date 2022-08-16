@@ -1,16 +1,161 @@
-import sys
+import gzip, sys, random, string
 import typing as t
 import warnings
 from itertools import product
 from pathlib import Path
 
+import ampal
 import h5py
 import numpy as np
-from ampal.amino_acids import side_chain_dihedrals, standard_amino_acids
+from ampal.amino_acids import (
+    side_chain_dihedrals,
+    standard_amino_acids,
+    polarity_Zimmerman,
+    residue_charge,
+)
 from numpy import genfromtxt
 
 from aposteriori.config import MAKE_FRAME_DATASET_VER, UNCOMMON_RESIDUE_DICT
 from aposteriori.data_prep.create_frame_data_set import DatasetMetadata
+
+
+def load_pdb_from_path(structure_path: Path) -> ampal.Assembly:
+    """
+    Simple utility to load PDB file into ampal and deal with .gz / containers
+
+    Parameters
+    ----------
+    structure_path: Path
+        Path to PDB structure
+
+    Returns
+    -------
+    pdb_structure: ampal.Assembly
+        Ampal assembly for structure path
+
+    """
+    # Load structure:
+    if structure_path.suffix == ".gz":
+        with gzip.open(str(structure_path), "rb") as inf:
+            pdb_structure = ampal.load_pdb(inf.read().decode(), path=False)
+    else:
+        pdb_structure = ampal.load_pdb(str(structure_path))
+    # Select first state of container:
+    if isinstance(pdb_structure, ampal.AmpalContainer):
+        pdb_structure = pdb_structure[0]
+    return pdb_structure
+
+
+def modify_pdb_with_input_property(
+    structure_path: Path, property_map: np.ndarray, property: str
+) -> ampal.Assembly:
+    """
+    Modifies input structure with polarity. A bit hacky.
+
+    Replaces residues letter to be changed to ALA for no polarity and K for polarity.
+
+    Parameters
+    ----------
+    structure_path: Path
+        Path to structures
+    property_map: np.ndarray
+        Property map
+
+    Returns
+    -------
+    pdb_structure: ampal.Assembly
+        Ampal structure with modified letter code
+
+    """
+    property = property.lower()
+    accepted_properties = ["polarity", "charge"]
+    assert (
+        property in accepted_properties
+    ), f"Property {property} not found among {accepted_properties}"
+    property_dict = {0: "A", 1: "K", -1: "D"}
+    pdb_structure = load_pdb_from_path(structure_path)
+    count = 0
+    merged_sequence = ""
+    for chain in pdb_structure:
+        for res in chain:
+            r = res.mol_letter
+            if r in standard_amino_acids.keys():
+                if property == "polarity":
+                    res_property = 0 if polarity_Zimmerman[r] < 20 else 1
+                else:
+                    res_property = residue_charge[r]
+            else:
+                res_property = 0
+            if property_map[count] != res_property:
+                res.mol_code = standard_amino_acids[property_dict[property_map[count]]]
+                res.mol_letter = property_dict[property_map[count]]
+            merged_sequence += res.mol_letter
+            count += 1
+    new_property_map = convert_seq_to_property(merged_sequence, property=property)
+    np.testing.assert_array_equal(
+        new_property_map, property_map, err_msg="Property maps differ."
+    )
+
+    return pdb_structure
+
+
+def create_residue_map_from_pdb(structure_path: Path) -> (t.List[str], str):
+    """
+    Creates a residue map (similar to dataset map) based on a pdb file.
+
+    Parameters
+    ----------
+    structure_path: Path
+        Path to pdb structure.
+
+    Returns
+    -------
+    residue_map: t.List[str]
+        Residue map of the form ["{res.mol_letter}{res.id} (Chain {chain.id})" ...]
+    merged_sequence: str
+        Full sequence merged into one string. If multiple chains, it squashes all the sequences together.
+    """
+    pdb_structure = load_pdb_from_path(structure_path)
+    residue_map = []
+    merged_sequence = ""
+    for chain in pdb_structure:
+        for res in chain:
+            residue_map.append(f"{res.mol_letter}{res.id} (Chain {chain.id})")
+            merged_sequence += res.mol_letter
+    return residue_map, merged_sequence
+
+
+def convert_seq_to_property(seq: str, property: str) -> t.List[int]:
+    """
+    Converts sequence of residues into property list from either polarity or charge.
+
+    Parameters
+    ----------
+    seq: str
+        Seq of residues
+    property: str
+        Property to be encoded
+
+    Returns
+    -------
+    output: t.List[int]
+        List of ints containing property of interest
+    """
+    accepted_properties = ["polarity", "charge"]
+    assert (
+        property.lower() in accepted_properties
+    ), f"Property {property} not found among {accepted_properties}"
+    res_list = list(seq)
+    if property == "polarity":
+        output_list = []
+        for r in res_list:
+            if r in standard_amino_acids.keys():
+                output_list.append(0 if polarity_Zimmerman[r] < 20 else 1)
+            else:
+                output_list.append(0)
+        return output_list
+    else:
+        return [residue_charge[r] for r in res_list]
 
 
 def lookup_blosum62(res_true: str, res_prediction: str) -> int:
@@ -253,6 +398,7 @@ def create_flat_dataset_map(
 def get_rotamer_codec() -> dict:
     """
     Creates a codec for tagging residues rotamers.
+
     Returns
     -------
     res_rot_to_encoding: dict
@@ -342,14 +488,14 @@ def load_batch(
 
 def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str):
     """
+    Converts datasetmap for compatibility with PDBench / Sequence recovery benchmark
 
     Parameters
     ----------
-    flat_dataset_map
-    model_name
-
-    Returns
-    -------
+    flat_dataset_map: list
+        Dataset map list
+    model_name: str
+        Name of model
 
     """
     count_dict = {}
@@ -562,6 +708,38 @@ def save_outputs_to_file(
     # Output model predictions:
     with open(f"{model_name}.csv", "a") as f:
         np.savetxt(f, predictions, delimiter=",")
+
+
+def create_map_alphanumeric_code(property_map: np.ndarray, k: int = 32) -> str:
+    """
+    Creates alphanumeric code based on property map
+
+    Parameters
+    ----------
+    property_map: np.ndarray
+        Array of property of length (n_residues,)
+    k: int
+        Number of characters used in the alphanumeric code
+
+    Returns
+    -------
+    map_code: str
+        String containing k alphanumeric characters
+    """
+    # Create alphanumeric code based on polarity map:
+    seed_map = "1"
+    for i in property_map:
+        # Dealing with negative charge:
+        if i < 0:
+            seed_map += str(2)
+        else:
+            seed_map += str(i)
+    seed_map = int(seed_map)
+    # Set random seed for repeatability
+    random.seed(seed_map)
+    # Create alphanumeric code
+    map_code = "".join(random.choices(string.ascii_letters + string.digits, k=k))
+    return map_code
 
 
 blosum62 = {

@@ -1,4 +1,7 @@
 import argparse
+import random
+import string
+import tempfile
 import time
 import typing as t
 from collections import Counter
@@ -21,7 +24,14 @@ from design_utils.analyse_utils import (
     calculate_seq_metrics,
     encode_sequence_to_onehot,
 )
-from design_utils.utils import get_rotamer_codec, lookup_blosum62
+from design_utils.utils import (
+    get_rotamer_codec,
+    lookup_blosum62,
+    create_residue_map_from_pdb,
+    convert_seq_to_property,
+    modify_pdb_with_input_property,
+    create_map_alphanumeric_code,
+)
 from predict import load_dataset_and_predict
 
 
@@ -67,6 +77,84 @@ def _build_aposteriori_dataset_wrapper(
             voxelise_all_states=False,
         )
     return data_path
+
+
+def _build_aposteriori_dataset_wrapper_property(
+    path_to_pdb: Path,
+    pdb_code: str,
+    output_path: Path,
+    property_map: np.ndarray,
+    workers: int,
+    property: str,
+):
+    output_path = output_path / property
+    output_path.mkdir(parents=True, exist_ok=True)
+    structure_path = path_to_pdb / pdb_code[1:3] / (pdb_code + ".pdb1.gz")
+    ampal_structure = modify_pdb_with_input_property(
+        structure_path, property_map, property=property
+    )
+    # Create alphanumeric code based on polarity map:
+    map_code = create_map_alphanumeric_code(property_map=property_map)
+    polar_path = output_path / f"{pdb_code + map_code}.pdb1"
+    # Save modified pdb to file:
+    with open(polar_path, "w") as f:
+        f.write(ampal_structure.pdb)
+    # Create dataset:
+    data_path = output_path / (pdb_code + map_code + ".hdf5")
+    if not data_path.exists():
+        make_frame_dataset(
+            structure_files=[polar_path],
+            output_folder=output_path,
+            name=pdb_code + map_code,
+            frame_edge_length=21.0,
+            voxels_per_side=21,
+            codec=Codec.CNOCBCAP() if property == "polarity" else Codec.CNOCBCAQ(),
+            processes=workers,
+            is_pdb_gzipped=False,
+            require_confirmation=False,
+            voxels_as_gaussian=True,
+            voxelise_all_states=False,
+        )
+    return data_path
+
+
+#
+# def _build_aposteriori_dataset_wrapper_charge(
+#     path_to_pdb: Path,
+#     pdb_code: str,
+#     output_path: Path,
+#     charge_map: np.ndarray,
+#     workers: int,
+# ):
+#     output_path = output_path / "charge"
+#     output_path.mkdir(parents=True, exist_ok=True)
+#     structure_path = path_to_pdb / pdb_code[1:3] / (pdb_code + ".pdb1.gz")
+#     ampal_structure = modify_pdb_with_input_property(
+#         structure_path, charge_map, property="charge"
+#     )
+#     # Create alphanumeric code based on polarity map:
+#     map_code = create_map_alphanumeric_code(property_map=charge_map)
+#     charge_path = output_path / f"{pdb_code + map_code}.pdb1"
+#     # Save modified pdb to file:
+#     with open(charge_path, "w") as f:
+#         f.write(ampal_structure.pdb)
+#     # Create dataset:
+#     data_path = output_path / (pdb_code + map_code + ".hdf5")
+#     if not data_path.exists():
+#         make_frame_dataset(
+#             structure_files=[charge_path],
+#             output_folder=output_path,
+#             name=pdb_code + map_code,
+#             frame_edge_length=21.0,
+#             voxels_per_side=21,
+#             codec=Codec.CNOCBCAQ(),
+#             processes=workers,
+#             is_pdb_gzipped=False,
+#             require_confirmation=False,
+#             voxels_as_gaussian=True,
+#             voxelise_all_states=False,
+#         )
+#     return data_path
 
 
 @st.cache(show_spinner=False)
@@ -123,7 +211,7 @@ def predict_dataset(
     model_name_suffix: str
         Extra string to append at the end of the files
     """
-    with st.spinner("Calculating results.."):
+    with st.spinner("Calculating results..."):
         (
             flat_dataset_map,
             pdb_to_sequence,
@@ -161,8 +249,13 @@ def show_pdb(pdb_code, label_res: t.Optional[str] = None):
     # loop_resid_dict = {sw1_name: sw1_resids, sw2_name: sw2_resids}
     if label_res:
         xyzview.setStyle({"cartoon": {"color": "white", "opacity": 0.5}})
-        _, resn, _, chain, _ = label_res.split(" ")
-        resn = int(resn)
+        (
+            _,
+            resn,
+            _,
+            chain,
+        ) = label_res.split(" ")
+        resn = int(resn[-1])
         zoom_residue = [
             {"resi": int(resn)},
             {
@@ -175,8 +268,8 @@ def show_pdb(pdb_code, label_res: t.Optional[str] = None):
         xyzview.addResLabels(zoom_residue[0], zoom_residue[1])
         xyzview.addStyle(zoom_residue[0], zoom_residue[2])
         xyzview.addStyle(
-            {"resi": f"{(resn-5)}-{resn+5}"},
-            {"cartoon": {"color": "orange", "opacity": 0.75}},
+            {"resi": f"{(resn)}-{resn+1}"},
+            {"cartoon": {"color": "orange", "opacity": 0.90}},
         )
         xyzview.zoomTo(zoom_residue[0])
     else:
@@ -260,7 +353,7 @@ def _draw_output_section(
     pdb_to_sequence,
     pdb_to_real_sequence,
 ):
-    st.subheader(selected_pdb)
+    st.subheader(selected_pdb[:4] if len(selected_pdb) > 5 else selected_pdb)
     try:
         pdb_session = show_pdb(selected_pdb[:4])
         showmol(pdb_session, height=500, width=640)
@@ -417,14 +510,14 @@ def _draw_output_section(
         "(", np.array(np.arange(len(selected_dataset_map[:, 2])), dtype=str)
     )
     f_n = np.core.defchararray.add(f_i, ") ")
+    f_n = np.core.defchararray.add(f_n, selected_dataset_map[:, 3])
     f_0 = np.core.defchararray.add(f_n, selected_dataset_map[:, 2])
-    f_1 = np.core.defchararray.add(f_0, " Chain ")
+    f_1 = np.core.defchararray.add(f_0, " (Chain ")
     f_2 = np.core.defchararray.add(f_1, selected_dataset_map[:, 1])
-    f_3 = np.core.defchararray.add(f_2, " ")
-    f_4 = np.core.defchararray.add(f_3, selected_dataset_map[:, 3])
-    datamap_to_idx = dict(zip(f_4, range(len(f_4))))
+    f_3 = np.core.defchararray.add(f_2, ")")
+    datamap_to_idx = dict(zip(f_3, range(len(f_3))))
     option = st.selectbox(
-        "Explore probabilities at specific positions:", (f_4), key="option"
+        "Explore probabilities at specific positions:", (f_3), key="option"
     )
     if "reload" in st.session_state.keys():
         pdb_session2 = show_pdb(selected_pdb[:4], st.session_state.option)
@@ -450,7 +543,10 @@ def _draw_performance_section(selected_pdb, slice_seq, slice_real, res, axis_lab
         - Confusion Matrix
     """
     # Plot Performance Metrics:
-    st.title(f"Performance Metrics {selected_pdb}")
+
+    st.title(
+        f"Performance Metrics {selected_pdb[:4] if len(selected_pdb) > 5 else selected_pdb}"
+    )
     results_dict = _calculate_metrics_wrapper(slice_seq, slice_real)
     st.subheader("Descriptive Metrics")
     cols = st.columns(4)
@@ -615,7 +711,7 @@ def _draw_optimisation_section(
     )
 
 
-def _draw_sidebar(all_pdbs: t.List[str]):
+def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
     """
     Draws Sidebar with elements:
         - PDB Code Input
@@ -636,6 +732,8 @@ def _draw_sidebar(all_pdbs: t.List[str]):
         label="Choose your Model",
         options=(
             "TIMED",
+            "TIMED_polar",
+            "TIMED_charge",
             "TIMED_Deep",
             "TIMED_rotamer",
             "TIMED_rotamer_balanced",
@@ -647,6 +745,12 @@ def _draw_sidebar(all_pdbs: t.List[str]):
         ),
         help="To check the performance of each of the models visit: https://github.com/wells-wood-research/timed-design/releases/tag/model",
     )
+    # Add polar settings if model input is polar:
+    placeholder_property_expander = st.sidebar.empty()
+    placeholder_property = st.sidebar.empty()
+    # Add extra menu for charge model
+    if model == "TIMED_charge":
+        placeholder_property2 = st.sidebar.empty()
     # Add Advanced settings menu for monte carlo sampling
     with st.sidebar.expander("Advanced Settings"):
         # Not using the sidebar as per https://github.com/streamlit/streamlit/issues/3157
@@ -666,6 +770,48 @@ def _draw_sidebar(all_pdbs: t.List[str]):
     if pdb not in all_pdbs:
         st.sidebar.error("PDB code not found")
         placeholder_run_button.button("Run model", disabled=True, key="4")
+    if model == "TIMED_polar" or model == "TIMED_charge":
+        structure_path = (
+            path_to_pdb / pdb[1:3] / (pdb + ".pdb1.gz")
+        )  # This is the problem. We need to override this
+        residue_map, merged_sequence = create_residue_map_from_pdb(structure_path)
+        model_property = "polarity" if model == "TIMED_polar" else "charge"
+        property_map = convert_seq_to_property(merged_sequence, property=model_property)
+        property_map = np.array(property_map, dtype=int)
+        residue_map = np.array(residue_map)
+        if model == "TIMED_polar":
+            selected_property_map = residue_map[property_map > 0]
+            placeholder_property = placeholder_property.multiselect(
+                "Make Polar Residues", residue_map, selected_property_map
+            )
+            # Find all indeces selected by the user:
+            idx_positives = np.where(np.in1d(residue_map, placeholder_property))[0]
+            # Convert to polar map:
+            selected_property_map = np.zeros(len(residue_map), dtype=int)
+            selected_property_map[idx_positives] = 1
+            property_map = selected_property_map
+        if model == "TIMED_charge":
+
+            positive_property_map = residue_map[property_map > 0]
+            placeholder_property = placeholder_property.multiselect(
+                "Make Positive Charge Residues", residue_map, positive_property_map
+            )
+            negative_property_map = residue_map[property_map < 0]
+            placeholder_property2 = placeholder_property2.multiselect(
+                "Make Negative Charge Residues", residue_map, negative_property_map
+            )
+            # Find all indeces selected by the user:
+            idx_positives = np.where(np.in1d(residue_map, placeholder_property))[0]
+            idx_negatives = np.where(np.in1d(residue_map, placeholder_property2))[0]
+            # Convert to polar map:
+            selected_property_map = np.zeros(len(residue_map), dtype=int)
+            selected_property_map[idx_positives] = 1
+            selected_property_map[idx_negatives] = -1
+            property_map = selected_property_map
+    else:
+        placeholder_property = st.sidebar.empty()
+        property_map = None
+        residue_map = None
     return (
         model,
         result,
@@ -676,8 +822,11 @@ def _draw_sidebar(all_pdbs: t.List[str]):
             sample_n_button,
             temperature_button,
         ),
+        (property_map, placeholder_property, residue_map),
         (use_montecarlo, sample_n, temperature),
     )
+
+
 # }}}
 
 
@@ -708,8 +857,9 @@ def main(args):
             sample_n_button,
             temperature_button,
         ),
+        (polarity_map, placeholder_polar, residue_map),
         (use_montecarlo, sample_n, temperature),
-    ) = _draw_sidebar(all_pdbs)
+    ) = _draw_sidebar(all_pdbs, path_to_pdb)
     # Find selected model
     model_path = path_to_models / (model + ".h5")
     res = list(standard_amino_acids.values())
@@ -718,6 +868,9 @@ def main(args):
     if result or "reload" in st.session_state.keys():
         # When user clicks on calculate, check that the model is a rotamer model or not:
         rotamer_mode = True if "rotamer" in model else False
+        property_mode = (
+            "polarity" if "polar" in model else "charge" if "charge" in model else False
+        )
         if rotamer_mode:
             _, flat_categories = _get_rotamer_codec_wrapper()
         else:
@@ -736,15 +889,33 @@ def main(args):
             )
         with st.spinner("Voxelising Protein Structure..."):
             t0_apo = time.time()
-            dataset = _build_aposteriori_dataset_wrapper(
-                path_to_pdb=path_to_pdb,
-                pdb_code=pdb,
-                output_path=path_to_data,
-                workers=args.workers,
-            )
+            if property_mode:
+                dataset = _build_aposteriori_dataset_wrapper_property(
+                    path_to_pdb=path_to_pdb,
+                    pdb_code=pdb,
+                    output_path=path_to_data,
+                    property_map=polarity_map,
+                    workers=args.workers,
+                    property=property_mode,
+                )
+            else:
+                dataset = _build_aposteriori_dataset_wrapper(
+                    path_to_pdb=path_to_pdb,
+                    pdb_code=pdb,
+                    output_path=path_to_data,
+                    workers=args.workers,
+                )
             t1_apo = time.time()
         # Use model to predict:
         t0 = time.time()
+        if property_mode:
+            model_suffix = (
+                pdb
+                + f"_{property_mode}_"
+                + create_map_alphanumeric_code(property_map=polarity_map)
+            )
+        else:
+            model_suffix = pdb
         (
             flat_dataset_map,
             pdb_to_sequence,
@@ -752,7 +923,7 @@ def main(args):
             pdb_to_real_sequence,
             _,
             _,
-        ) = predict_dataset(dataset, model_path, rotamer_mode, pdb)
+        ) = predict_dataset(dataset, model_path, rotamer_mode, model_suffix)
         t1 = time.time()
         time_string = time.strftime("%M m %S s", time.gmtime(t1 - t0))
         apo_time_string = time.strftime("%M m %S s", time.gmtime(t1_apo - t0_apo))
@@ -787,8 +958,6 @@ def main(args):
                         real_metrics,
                         pdb_to_real_sequence,
                     )
-
-        placeholder_run_button.button("Run model", disabled=False, key="3")
         with st.sidebar.expander("Advanced Settings"):
             use_montecarlo_button.checkbox(
                 "Optimize sequences using Monte Carlo", disabled=False, key="mc_3"

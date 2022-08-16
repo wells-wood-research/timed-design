@@ -6,7 +6,7 @@ from multiprocessing import Pool
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
 
-from utils.analyse_utils import calculate_seq_metrics
+from design_utils.analyse_utils import calculate_seq_metrics
 
 
 def save_as(pdb_to_sampled: dict, filename: str, mode: str):
