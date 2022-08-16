@@ -72,10 +72,13 @@ def main(args):
             reference_pdb = ampal.load_pdb(str(pdb_path))
             if isinstance(reference_pdb, ampal.AmpalContainer):
                 reference_pdb = reference_pdb[0]
-            # Sanity checks:
-            assert len(curr_pdb.sequences[0]) == len(
-                reference_pdb.sequences[0]
-            ), f"Length of reference sequence and current pdb do not match for {pdb}: {len(curr_pdb.sequences[0])} vs {len(reference_pdb.sequences[0])}"
+            try:
+                # Sanity checks:
+                assert len(curr_pdb.sequences[0]) == len(
+                    reference_pdb.sequences[0]
+                ), f"Length of reference sequence and current pdb do not match for {pdb}: {len(curr_pdb.sequences[0])} vs {len(reference_pdb.sequences[0])}"
+            except AssertionError:
+                continue
             # Calculate accuracy:
             seq_accuracy = metrics.accuracy_score(list(curr_pdb.sequences[0]), list(reference_pdb.sequences[0]))
             curr_results = [model, pdb, n, temp, seq_accuracy]
