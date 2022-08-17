@@ -65,7 +65,7 @@ def analyse_pdb_path(curr_path, args):
             reference_pdb.sequences[0]
         ), f"Length of reference sequence and current pdb do not match for {pdb}: {len(curr_pdb.sequences[0])} vs {len(reference_pdb.sequences[0])}"
     except AssertionError:
-        return None
+        return [model, pdb, n, temp, np.nan, np.nan, np.nan]
     # Calculate accuracy:
     seq_accuracy = metrics.accuracy_score(list(curr_pdb.sequences[0]), list(reference_pdb.sequences[0]))
     curr_results = [model, pdb, n, temp, seq_accuracy]
@@ -94,6 +94,7 @@ def analyse_pdb_path(curr_path, args):
         curr_results.append(curr_gdt)
     # Pool all metrics together:
     return curr_results
+
 
 def main(args):
     args.af2_results_path = Path(args.af2_results_path)
