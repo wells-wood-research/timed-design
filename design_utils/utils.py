@@ -395,21 +395,32 @@ def create_flat_dataset_map(
     return flat_dataset_map, training_set_pdbs
 
 
-def get_rotamer_codec() -> dict:
+def get_rotamer_codec(return_reduction_guide: bool = False) -> t.Optional[t.List[int]]:
     """
     Creates a codec for tagging residues rotamers.
 
+    return_reduction_guide: Bool
+        Whether to return reduction guide to squash
+
     Returns
     -------
-    res_rot_to_encoding: dict
-        Rotamer residues encoding of the format {1_letter_res : {rotamer_tuple: encoding}}
+    rot_to_20res: dict
+        Rotamer residues encoding of the format {rotamer_number : [ (20,) encoding ]}
+    flat_categories: t.List[str]
+        Categories of rotamers (338,) eg. ['ALA_0', 'CYS_1', 'CYS_2', 'CYS_3', 'ASP_11', 'ASP_12', 'ASP_13', ... ]
+    reduction_guide: t.Optional[t.List[str]]
+        List of int indicating which idxs to reduce:
+        [0, 1, 4, 13, 40, 49, 50, 59, 68, 149, 158, 185, 194, 203, 230, 311, 314, 317, 320, 329]
+        https://github.com/wells-wood-research/timed-design/issues/7
     """
     res_rot_to_encoding = {}
     flat_categories = []
     rot_to_20res = {}
     all_count = 338
     r_count = 0  # Number of rotamers processed so far
+    reduction_guide = []
     for i, (a, res) in enumerate(standard_amino_acids.items()):
+        reduction_guide.append(r_count)
         if res in side_chain_dihedrals:
             n_rot = len(side_chain_dihedrals[res])
             all_rotamers = list(product([1, 2, 3], repeat=n_rot))
@@ -436,8 +447,29 @@ def get_rotamer_codec() -> dict:
             rot_to_20res[r_count] = np.array([0] * 20)
             rot_to_20res[r_count][i] = 1
             r_count += n_rot
+    if return_reduction_guide:
+        return rot_to_20res, flat_categories, reduction_guide
+    else:
+        return rot_to_20res, flat_categories
 
-    return rot_to_20res, flat_categories
+
+def compress_rotamer_predictions_to_20(prediction_matrix: np.ndarray) -> np.ndarray:
+    """
+    Converts the rotamer prediction matrix from (n, 388) to (n, 20)
+
+    Parameters
+    ----------
+    prediction_matrix: np.ndarray
+        Rotamer prediction matrix (n, 388)
+
+    Returns
+    -------
+    reduced_prediction_matrix: np.ndarray
+        Reduced rotamer prediction matrix (n, 20)
+
+    """
+    _, _, reduction_guide = get_rotamer_codec(return_reduction_guide=True)
+    return np.add.reduceat(prediction_matrix, reduction_guide, axis=1)
 
 
 def load_batch(

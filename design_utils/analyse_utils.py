@@ -6,9 +6,11 @@ from multiprocessing import Pool
 from pathlib import Path
 
 import ampal
+import logomaker
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from ampal.amino_acids import standard_amino_acids
 from ampal.analyse_protein import (
     sequence_charge,
@@ -16,6 +18,7 @@ from ampal.analyse_protein import (
     sequence_molar_extinction_280,
     sequence_molecular_weight,
 )
+from matplotlib.figure import Figure
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -30,6 +33,40 @@ from tqdm import tqdm
 from aposteriori.data_prep.create_frame_data_set import _fetch_pdb
 from design_utils.scwrl_utils import pack_side_chains_scwrl
 from design_utils.utils import get_rotamer_codec
+from design_utils.utils import compress_rotamer_predictions_to_20
+
+
+def create_sequence_logo(prediction_matrix: np.ndarray) -> Figure:
+    """
+    Create sequence logo for prediction matrix
+
+    Parameters
+    ----------
+    prediction_matrix: np.ndarray
+        Prediction matrix (n, 20) or (n,388)
+
+    Returns
+    -------
+    fig: Figure
+        Matplotlib fig of sequence logo
+
+    """
+    if prediction_matrix.shape[-1] == 338:
+        prediction_matrix = compress_rotamer_predictions_to_20(prediction_matrix)
+
+    prediction_df = pd.DataFrame(prediction_matrix, columns=list(standard_amino_acids.keys()))
+    # create Logo object
+    seq_logo = logomaker.Logo(
+        prediction_df,
+        color_scheme="chemistry",
+        vpad=0.1,
+        width=0.8,
+        figsize=(10, 2.5),
+    )
+    seq_logo.style_xticks(anchor=0, spacing=5)
+    seq_logo.ax.set_ylabel('Probability (%)')
+    seq_logo.ax.set_xlabel('Residue Position')
+    return seq_logo.ax.get_figure()
 
 
 def calculate_seq_metrics(seq: str) -> t.Tuple[float, float, float, float]:
@@ -686,11 +723,6 @@ def tag_pdb_with_rot(
             ),
         )
         p.close()
-
-    # results_dict_list = []
-    # for pdb in pdb_codes:
-    #     results_dict= _tag_pdb_with_rot(pdb, path_to_pdb)
-    #     results_dict_list.append(results_dict)
     # Flatten dictionary:
     for curr_dict in results_dict_list:
         curr_res_dict, curr_assembly_dict = curr_dict

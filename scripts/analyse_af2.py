@@ -44,6 +44,7 @@ def calculate_RMSD_and_gdt(pdb_original_path, pdb_predicted_path) -> (float, flo
     mean_gdt = np.mean(gdts)
     return rmsd, mean_gdt
 
+
 def main(args):
     args.af2_results_path = Path(args.af2_results_path)
     args.fasta_path = Path(args.fasta_path)
