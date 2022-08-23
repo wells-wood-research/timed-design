@@ -260,4 +260,19 @@ Uses Monte Carlo sampling to sample sequences from a  probability distribution. 
 
 ## 4. Cite This Work
 
----Under construction---
+```
+@software{leonardo_v_castorina_2022_6997495,
+  author       = {Leonardo V Castorina and
+                  Kartic Subr and
+                  Christopher W. Wood},
+  title        = {{TIMED-Design: Efficient Protein Sequence Design 
+                   with Deep Learning}},
+  month        = aug,
+  year         = 2022,
+  publisher    = {Zenodo},
+  version      = {v0.1-alpha},
+  doi          = {10.5281/zenodo.6997495},
+  url          = {https://doi.org/10.5281/zenodo.6997495}
+}
+```
+
