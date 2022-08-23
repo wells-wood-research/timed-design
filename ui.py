@@ -1,7 +1,4 @@
 import argparse
-import random
-import string
-import tempfile
 import time
 import typing as t
 from collections import Counter
@@ -18,21 +15,22 @@ from sklearn.metrics import accuracy_score
 from stmol import showmol
 
 from aposteriori.data_prep.create_frame_data_set import Codec, make_frame_dataset
-from sample import main_sample
 from design_utils.analyse_utils import (
     calculate_metrics,
     calculate_seq_metrics,
+    create_sequence_logo,
     encode_sequence_to_onehot,
 )
 from design_utils.utils import (
+    convert_seq_to_property,
+    create_map_alphanumeric_code,
+    create_residue_map_from_pdb,
     get_rotamer_codec,
     lookup_blosum62,
-    create_residue_map_from_pdb,
-    convert_seq_to_property,
     modify_pdb_with_input_property,
-    create_map_alphanumeric_code,
 )
 from predict import load_dataset_and_predict
+from sample import main_sample
 
 
 # {{{ Cached Wrappers
@@ -116,45 +114,6 @@ def _build_aposteriori_dataset_wrapper_property(
             voxelise_all_states=False,
         )
     return data_path
-
-
-#
-# def _build_aposteriori_dataset_wrapper_charge(
-#     path_to_pdb: Path,
-#     pdb_code: str,
-#     output_path: Path,
-#     charge_map: np.ndarray,
-#     workers: int,
-# ):
-#     output_path = output_path / "charge"
-#     output_path.mkdir(parents=True, exist_ok=True)
-#     structure_path = path_to_pdb / pdb_code[1:3] / (pdb_code + ".pdb1.gz")
-#     ampal_structure = modify_pdb_with_input_property(
-#         structure_path, charge_map, property="charge"
-#     )
-#     # Create alphanumeric code based on polarity map:
-#     map_code = create_map_alphanumeric_code(property_map=charge_map)
-#     charge_path = output_path / f"{pdb_code + map_code}.pdb1"
-#     # Save modified pdb to file:
-#     with open(charge_path, "w") as f:
-#         f.write(ampal_structure.pdb)
-#     # Create dataset:
-#     data_path = output_path / (pdb_code + map_code + ".hdf5")
-#     if not data_path.exists():
-#         make_frame_dataset(
-#             structure_files=[charge_path],
-#             output_folder=output_path,
-#             name=pdb_code + map_code,
-#             frame_edge_length=21.0,
-#             voxels_per_side=21,
-#             codec=Codec.CNOCBCAQ(),
-#             processes=workers,
-#             is_pdb_gzipped=False,
-#             require_confirmation=False,
-#             voxels_as_gaussian=True,
-#             voxelise_all_states=False,
-#         )
-#     return data_path
 
 
 @st.cache(show_spinner=False)
@@ -362,6 +321,9 @@ def _draw_output_section(
     # Show predicted sequence:
     st.subheader("Designed Sequence")
     st.code(pdb_to_sequence[selected_pdb])
+    # Create placeholder for seq logo - necessary as the seq logo takes a while to be produced
+    # This makes the UI feel like it loads faster
+    placeholder_seq_logo = st.empty()
     # Calculate Seq Metrics:
     real_metrics = _calculate_seq_metrics_wrapper(pdb_to_real_sequence[selected_pdb])
     predicted_metrics = _calculate_seq_metrics_wrapper(pdb_to_sequence[selected_pdb])
@@ -532,6 +494,9 @@ def _draw_output_section(
     # Plot Residue Composition:
     st.write("Residue Composition")
     st.altair_chart(chart_residue_comp, use_container_width=False)
+    # Show sequence logo:
+    fig = create_sequence_logo(np.array(pdb_to_probability[selected_pdb]))
+    placeholder_seq_logo.pyplot(fig)
     return slice_seq, slice_real, real_metrics
 
 
