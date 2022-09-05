@@ -326,11 +326,6 @@ def _draw_output_section(
     pdb_to_real_sequence,
 ):
     st.subheader(selected_pdb[:4] if len(selected_pdb) > 5 else selected_pdb)
-    try:
-        pdb_session = show_pdb(selected_pdb[:4])
-        showmol(pdb_session, height=500, width=640)
-    except:
-        pass
     # Show predicted sequence:
     st.subheader("Designed Sequence")
     st.code(pdb_to_sequence[selected_pdb])
@@ -925,6 +920,12 @@ def main(args):
             )
         # Print Results:
         st.title("Model Output")
+        # Show pymol structure
+        try:
+            pdb_session = show_pdb(structure_path)
+            showmol(pdb_session, height=500, width=640)
+        except:
+            pass
         # For each key in the dataset:
         for k in pdb_to_probability.keys():
             slice_seq, slice_real, real_metrics = _draw_output_section(
