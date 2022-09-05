@@ -746,7 +746,7 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
             )  # This is the problem. We need to override this
     # Else user has uploaded a structure
     else:
-        temp_upload_dir = Path(tempfile.TemporaryDirectory())
+        temp_upload_dir = Path(tempfile.TemporaryDirectory().name)
         structure_path = temp_upload_dir / uploaded_pdb.name
         structure_path.write(uploaded_pdb.getvalue().decode("utf-8"))
 
