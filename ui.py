@@ -211,14 +211,12 @@ def show_pdb(pdb_code, label_res: t.Optional[str] = None):
     if isinstance(pdb_code, str):
         xyzview = py3Dmol.view(query="pdb:" + pdb_code)
     elif isinstance(pdb_code, Path):
-        xyzview = py3Dmol.view()
         if pdb_code.suffix ==".gz":
             with gzip.open(str(pdb_code), "rb") as inf:
                 ampal_structure = ampal.load_pdb(inf.read().decode(), path=False)
         else:
             ampal_structure = ampal.load_pdb(pdb_code)
-
-        xyzview.addModelsAsFrames(ampal_structure.pdb)
+        xyzview = py3Dmol.view(data=ampal_structure.pdb)
     else:
         raise ValueError(f"Unknown type passed to py3Dmol {type(pdb_code)}")
     xyzview.setStyle({"cartoon": {"color": "spectrum"}})
