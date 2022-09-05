@@ -29,6 +29,8 @@ from design_utils.utils import (
     lookup_blosum62,
     modify_pdb_with_input_property,
 )
+import tempfile
+
 from predict import load_dataset_and_predict
 from sample import main_sample
 
@@ -690,8 +692,9 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
     pdb = st.sidebar.text_input("Enter a PDB Code:", value="1qys", placeholder="1qys")
     pdb = pdb.lower()
     st.sidebar.write("or")
-    dataset1 = st.sidebar.file_uploader(
-        label="Upload your backbone/PDB of interest", disabled=True
+    # TODO: Disable input pdb code if upload occurs
+    uploaded_pdb = st.sidebar.file_uploader(
+        label="Upload your backbone/PDB of interest", type=['pdb', 'pdb1'], help="Upload your .pdb or pdb1 file. Files are immediately deleted after the prediction.",
     )
     model = st.sidebar.selectbox(
         label="Choose your Model",
@@ -724,21 +727,33 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
             "Optimize sequences using Monte Carlo", key="mc"
         )
         sample_n_button = st.empty()
-        sample_n = sample_n_button.slider("Number of sequences to sample", 3, 300, 200)
+        sample_n = sample_n_button.slider("Number of sequences to generate", 3, 300, 200)
         temperature_button = st.empty()
-        temperature = temperature_button.slider("Temperature Factor", 0.1, 1.0, 1.0)
+        temperature = temperature_button.slider("Temperature Factor", 0.0, 1.0, 0.2, help=" A temperature factor can be applied to affect the distributions. A higher temperature factor will lead to more diverse sequences.")
     placeholder_run_button = st.sidebar.empty()
     result = placeholder_run_button.button("Run model", key="1")
     st.sidebar.markdown(
         "[Tell us what you think!](https://forms.office.com/Pages/ResponsePage.aspx?id=sAafLmkWiUWHiRCgaTTcYY_RqhHaishKsB4CsyQgPCxUOU9DQjhJU0s1QjZVVTNPU0xDVzlFTEhNMS4u)"
     )
-    if pdb not in all_pdbs:
-        st.sidebar.error("PDB code not found")
-        placeholder_run_button.button("Run model", disabled=True, key="4")
+    # If user has not uploaded a PDB - check it out
+    if not uploaded_pdb:
+        if pdb not in all_pdbs:
+            st.sidebar.error("PDB code not found")
+            placeholder_run_button.button("Run model", disabled=True, key="4")
     if model == "TIMED_polar" or model == "TIMED_charge":
-        structure_path = (
-            path_to_pdb / pdb[1:3] / (pdb + ".pdb1.gz")
-        )  # This is the problem. We need to override this
+        if uploaded_pdb:
+            temp_upload_dir = Path(tempfile.TemporaryDirectory())
+            with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    delete=False,
+                    suffix=".pdb",
+            ) as pdb_path:
+                structure_path = temp_upload_dir / pdb_path
+                structure_path.write(uploaded_pdb.getvalue().decode("utf-8"))
+        else:
+            structure_path = (
+                    path_to_pdb / pdb[1:3] / (pdb + ".pdb1.gz")
+            )  # This is the problem. We need to override this
         residue_map, merged_sequence = create_residue_map_from_pdb(structure_path)
         model_property = "polarity" if model == "TIMED_polar" else "charge"
         property_map = convert_seq_to_property(merged_sequence, property=model_property)
@@ -799,6 +814,8 @@ def main(args):
     path_to_data = Path(args.path_to_data)
     path_to_models = Path(args.path_to_models)
     path_to_pdb = Path(args.path_to_pdb)
+    # Create output folder
+    path_to_data.mkdir(exist_ok=True)
     # Check path exists:
     assert (
         path_to_data.exists()
