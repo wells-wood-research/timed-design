@@ -927,8 +927,9 @@ def main(args):
         # Show pymol structure
         pdb_session = show_pdb(structure_path)
         showmol(pdb_session, height=500, width=640)
-        with st.spinner("Deleting uploaded files and data..."):
-            rm_tree(structure_path.parent)
+        if "temp_timed_design" in str(structure_path):
+            with st.spinner("Deleting uploaded files and data..."):
+                rm_tree(structure_path.parent)
         # For each key in the dataset:
         for k in pdb_to_probability.keys():
             slice_seq, slice_real, real_metrics = _draw_output_section(
