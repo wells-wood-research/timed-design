@@ -1,11 +1,12 @@
 import argparse
+import gzip
+import tempfile
 import time
 import typing as t
 from collections import Counter
 from pathlib import Path
 
 import altair as alt
-import ampal
 import numpy as np
 import pandas as pd
 import py3Dmol
@@ -15,6 +16,7 @@ from millify import millify
 from sklearn.metrics import accuracy_score
 from stmol import showmol
 
+import ampal
 from aposteriori.data_prep.create_frame_data_set import Codec, make_frame_dataset
 from design_utils.analyse_utils import (
     calculate_metrics,
@@ -30,8 +32,6 @@ from design_utils.utils import (
     lookup_blosum62,
     modify_pdb_with_input_property,
 )
-import tempfile
-
 from predict import load_dataset_and_predict
 from sample import main_sample
 
@@ -212,7 +212,12 @@ def show_pdb(pdb_code, label_res: t.Optional[str] = None):
         xyzview = py3Dmol.view(query="pdb:" + pdb_code)
     elif isinstance(pdb_code, Path):
         xyzview = py3Dmol.view()
-        ampal_structure = ampal.load_pdb(pdb_code)
+        if pdb_code.suffix ==".gz":
+            with gzip.open(str(pdb_code), "rb") as inf:
+                ampal_structure = ampal.load_pdb(inf.read().decode(), path=False)
+        else:
+            ampal_structure = ampal.load_pdb(pdb_code)
+
         xyzview.addModelsAsFrames(ampal_structure.pdb)
     else:
         raise ValueError(f"Unknown type passed to py3Dmol {type(pdb_code)}")
