@@ -748,7 +748,7 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
     else:
         # Create a temporary directory for the upload and then save file to it
         temp_upload_dir = Path(tempfile.TemporaryDirectory().name)
-        structure_path = temp_upload_dir / uploaded_pdb.name + ".pdb"
+        structure_path = temp_upload_dir / (uploaded_pdb.name + ".pdb")
         with open(structure_path, "w") as f:
             f.write(uploaded_pdb.getvalue().decode("utf-8"))
 
