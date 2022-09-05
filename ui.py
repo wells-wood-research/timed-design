@@ -921,11 +921,8 @@ def main(args):
         # Print Results:
         st.title("Model Output")
         # Show pymol structure
-        try:
-            pdb_session = show_pdb(structure_path)
-            showmol(pdb_session, height=500, width=640)
-        except:
-            pass
+        pdb_session = show_pdb(structure_path)
+        showmol(pdb_session, height=500, width=640)
         # For each key in the dataset:
         for k in pdb_to_probability.keys():
             slice_seq, slice_real, real_metrics = _draw_output_section(
