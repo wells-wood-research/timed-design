@@ -58,6 +58,8 @@ def _calculate_sequence_similarity_wrapper(real_seq: str, predicted_seq: str):
 def _build_aposteriori_dataset_wrapper(
     structure_path: Path, output_path: Path, workers: int
 ):
+    if "temp_timed_design" in structure_path.name:
+        output_path = structure_path.parent
     pdb_code = structure_path.name
     data_path = output_path / (pdb_code + ".hdf5")
     if data_path.exists():
@@ -71,7 +73,7 @@ def _build_aposteriori_dataset_wrapper(
             voxels_per_side=21,
             codec=Codec.CNOCBCA(),
             processes=workers,
-            is_pdb_gzipped=True,
+            is_pdb_gzipped=True if structure_path.suffix == ".gz" else False,
             require_confirmation=False,
             voxels_as_gaussian=True,
             voxelise_all_states=False,
@@ -86,6 +88,8 @@ def _build_aposteriori_dataset_wrapper_property(
     workers: int,
     property: str,
 ):
+    if "temp_timed_design" in structure_path.name:
+        output_path = structure_path.parent
     output_path = output_path / property
     output_path.mkdir(parents=True, exist_ok=True)
     ampal_structure = modify_pdb_with_input_property(
@@ -109,7 +113,7 @@ def _build_aposteriori_dataset_wrapper_property(
             voxels_per_side=21,
             codec=Codec.CNOCBCAP() if property == "polarity" else Codec.CNOCBCAQ(),
             processes=workers,
-            is_pdb_gzipped=False,
+            is_pdb_gzipped=True if structure_path.suffix == ".gz" else False,
             require_confirmation=False,
             voxels_as_gaussian=True,
             voxelise_all_states=False,
@@ -747,7 +751,7 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
     # Else user has uploaded a structure
     else:
         # Create a temporary directory for the upload and then save file to it
-        temp_upload_dir = Path(tempfile.mkdtemp(suffix="timed_design"))
+        temp_upload_dir = Path(tempfile.mkdtemp(suffix="temp_timed_design"))
         structure_path = temp_upload_dir / uploaded_pdb.name
         with open(structure_path, "w") as f:
             f.write(uploaded_pdb.getvalue().decode("utf-8"))
