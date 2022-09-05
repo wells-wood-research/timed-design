@@ -56,9 +56,9 @@ def _calculate_sequence_similarity_wrapper(real_seq: str, predicted_seq: str):
 
 @st.cache(show_spinner=False)
 def _build_aposteriori_dataset_wrapper(
-    path_to_pdb: Path, pdb_code: str, output_path: Path, workers: int
+    structure_path: Path, output_path: Path, workers: int
 ):
-    structure_path = path_to_pdb / pdb_code[1:3] / (pdb_code + ".pdb1.gz")
+    pdb_code = structure_path.name
     data_path = output_path / (pdb_code + ".hdf5")
     if data_path.exists():
         return data_path
@@ -80,19 +80,18 @@ def _build_aposteriori_dataset_wrapper(
 
 
 def _build_aposteriori_dataset_wrapper_property(
-    path_to_pdb: Path,
-    pdb_code: str,
-    output_path: Path,
+    structure_path: Path,
+    output_path: Path, # TODO This path should be changed if user uploads
     property_map: np.ndarray,
     workers: int,
     property: str,
 ):
     output_path = output_path / property
     output_path.mkdir(parents=True, exist_ok=True)
-    structure_path = path_to_pdb / pdb_code[1:3] / (pdb_code + ".pdb1.gz")
     ampal_structure = modify_pdb_with_input_property(
         structure_path, property_map, property=property
     )
+    pdb_code = structure_path.name
     # Create alphanumeric code based on polarity map:
     map_code = create_map_alphanumeric_code(property_map=property_map)
     polar_path = output_path / f"{pdb_code + map_code}.pdb1"
@@ -740,20 +739,18 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
         if pdb not in all_pdbs:
             st.sidebar.error("PDB code not found")
             placeholder_run_button.button("Run model", disabled=True, key="4")
-    if model == "TIMED_polar" or model == "TIMED_charge":
-        if uploaded_pdb:
-            temp_upload_dir = Path(tempfile.TemporaryDirectory())
-            with tempfile.NamedTemporaryFile(
-                    mode="w",
-                    delete=False,
-                    suffix=".pdb",
-            ) as pdb_path:
-                structure_path = temp_upload_dir / pdb_path
-                structure_path.write(uploaded_pdb.getvalue().decode("utf-8"))
+            structure_path = None
         else:
             structure_path = (
                     path_to_pdb / pdb[1:3] / (pdb + ".pdb1.gz")
             )  # This is the problem. We need to override this
+    # Else user has uploaded a structure
+    else:
+        temp_upload_dir = Path(tempfile.TemporaryDirectory())
+        structure_path = temp_upload_dir / uploaded_pdb.name
+        structure_path.write(uploaded_pdb.getvalue().decode("utf-8"))
+
+    if model == "TIMED_polar" or model == "TIMED_charge":
         residue_map, merged_sequence = create_residue_map_from_pdb(structure_path)
         model_property = "polarity" if model == "TIMED_polar" else "charge"
         property_map = convert_seq_to_property(merged_sequence, property=model_property)
@@ -795,7 +792,7 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
     return (
         model,
         result,
-        pdb,
+        structure_path,
         (
             placeholder_run_button,
             use_montecarlo_button,
@@ -832,7 +829,7 @@ def main(args):
     (
         model,
         result,
-        pdb,
+        structure_path,
         (
             placeholder_run_button,
             use_montecarlo_button,
@@ -873,8 +870,7 @@ def main(args):
             t0_apo = time.time()
             if property_mode:
                 dataset = _build_aposteriori_dataset_wrapper_property(
-                    path_to_pdb=path_to_pdb,
-                    pdb_code=pdb,
+                    structure_path=structure_path,
                     output_path=path_to_data,
                     property_map=polarity_map,
                     workers=args.workers,
@@ -882,8 +878,7 @@ def main(args):
                 )
             else:
                 dataset = _build_aposteriori_dataset_wrapper(
-                    path_to_pdb=path_to_pdb,
-                    pdb_code=pdb,
+                    structure_path=structure_path,
                     output_path=path_to_data,
                     workers=args.workers,
                 )
@@ -892,12 +887,12 @@ def main(args):
         t0 = time.time()
         if property_mode:
             model_suffix = (
-                pdb
+                structure_path.name
                 + f"_{property_mode}_"
                 + create_map_alphanumeric_code(property_map=polarity_map)
             )
         else:
-            model_suffix = pdb
+            model_suffix = structure_path.name
         (
             flat_dataset_map,
             pdb_to_sequence,
