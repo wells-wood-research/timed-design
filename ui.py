@@ -747,7 +747,7 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
     # Else user has uploaded a structure
     else:
         # Create a temporary directory for the upload and then save file to it
-        temp_upload_dir = Path(tempfile.TemporaryDirectory().name)
+        temp_upload_dir = Path(tempfile.mkdtemp(suffix="timed_design"))
         structure_path = temp_upload_dir / uploaded_pdb.name
         with open(structure_path, "w") as f:
             f.write(uploaded_pdb.getvalue().decode("utf-8"))
