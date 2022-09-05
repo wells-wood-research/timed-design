@@ -5,6 +5,7 @@ from collections import Counter
 from pathlib import Path
 
 import altair as alt
+import ampal
 import numpy as np
 import pandas as pd
 import py3Dmol
@@ -60,7 +61,7 @@ def _build_aposteriori_dataset_wrapper(
 ):
     if "temp_timed_design" in str(structure_path):
         output_path = structure_path.parent
-    pdb_code = structure_path.name
+    pdb_code = structure_path.name.split(".pdb")[0]
     data_path = output_path / (pdb_code + ".hdf5")
     if data_path.exists():
         return data_path
@@ -95,7 +96,7 @@ def _build_aposteriori_dataset_wrapper_property(
     ampal_structure = modify_pdb_with_input_property(
         structure_path, property_map, property=property
     )
-    pdb_code = structure_path.name
+    pdb_code = structure_path.name.split(".pdb")[0]
     # Create alphanumeric code based on polarity map:
     map_code = create_map_alphanumeric_code(property_map=property_map)
     polar_path = output_path / f"{pdb_code + map_code}.pdb1"
@@ -207,7 +208,14 @@ def predict_dataset(
     show_spinner=False, allow_output_mutation=True
 )  # Output mutation necessary as object changes as it is interacted with
 def show_pdb(pdb_code, label_res: t.Optional[str] = None):
-    xyzview = py3Dmol.view(query="pdb:" + pdb_code)
+    if isinstance(pdb_code, str):
+        xyzview = py3Dmol.view(query="pdb:" + pdb_code)
+    elif isinstance(pdb_code, Path):
+        xyzview = py3Dmol.view()
+        ampal_structure = ampal.load_pdb(pdb_code)
+        xyzview.addModelsAsFrames(ampal_structure.pdb)
+    else:
+        raise ValueError(f"Unknown type passed to py3Dmol {type(pdb_code)}")
     xyzview.setStyle({"cartoon": {"color": "spectrum"}})
     xyzview.setBackgroundColor("#FFFFFF")
     # loop_resid_dict = {sw1_name: sw1_resids, sw2_name: sw2_resids}
