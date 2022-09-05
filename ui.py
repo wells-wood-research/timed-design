@@ -58,7 +58,7 @@ def _calculate_sequence_similarity_wrapper(real_seq: str, predicted_seq: str):
 def _build_aposteriori_dataset_wrapper(
     structure_path: Path, output_path: Path, workers: int
 ):
-    if "temp_timed_design" in structure_path.name:
+    if "temp_timed_design" in str(structure_path):
         output_path = structure_path.parent
     pdb_code = structure_path.name
     data_path = output_path / (pdb_code + ".hdf5")
@@ -88,7 +88,7 @@ def _build_aposteriori_dataset_wrapper_property(
     workers: int,
     property: str,
 ):
-    if "temp_timed_design" in structure_path.name:
+    if "temp_timed_design" in str(structure_path):
         output_path = structure_path.parent
     output_path = output_path / property
     output_path.mkdir(parents=True, exist_ok=True)
