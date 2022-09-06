@@ -25,7 +25,7 @@ def calculate_RMSD_and_gdt(pdb_original_path, pdb_predicted_path) -> (float, flo
     # Select only C alphas
     sel_ref += " and name CA"
     sel_model += " and name CA"
-    rmsd = cmd.cealign(target=sel_ref, mobile=sel_model)[0]
+    rmsd = cmd.cealign(target=sel_ref, mobile=sel_model)['RMSD']
     cmd.cealign(target=sel_ref, mobile=sel_model, transform=0, object="aln")
     mapping = cmd.get_raw_alignment("aln")
     distances = []
