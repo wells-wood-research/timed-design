@@ -25,10 +25,9 @@ def calculate_RMSD_and_gdt(pdb_original_path, pdb_predicted_path) -> (float, flo
     # Select only C alphas
     sel_ref += " and name CA"
     sel_model += " and name CA"
-    rmsd = cmd.align(target=sel_ref, mobile=sel_model)[0]
-    cmd.align(target=sel_ref, mobile=sel_model, cycles=0, transform=0, object="aln")
+    rmsd = cmd.cealign(target=sel_ref, mobile=sel_model)[0]
+    cmd.cealign(target=sel_ref, mobile=sel_model, transform=0, object="aln")
     mapping = cmd.get_raw_alignment("aln")
-    cutoffs = [1.0, 2.0, 4.0, 8.0]
     distances = []
     for mapping_ in mapping:
         try:
@@ -40,13 +39,8 @@ def calculate_RMSD_and_gdt(pdb_original_path, pdb_predicted_path) -> (float, flo
         except:
             continue
     distances = np.asarray(distances)
-    gdts = []
-    for cutoff in cutoffs:
-        gdt_cutoff = (distances <= cutoff).sum() / (len(distances))
-        gdts.append(gdt_cutoff)
-
-    mean_gdt = np.mean(gdts)
-    return rmsd, mean_gdt
+    # TODO: Deal with distances in a better way
+    return rmsd, np.mean(distances)
 
 def analyse_pdb_path(curr_path, args):
     model, pdb, temp, n, af2_model = curr_path.name.split("_", maxsplit=4)
