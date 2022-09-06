@@ -61,7 +61,7 @@ def create_sequence_logo(prediction_matrix: np.ndarray) -> Figure:
         color_scheme="chemistry",
         vpad=0.1,
         width=0.8,
-        figsize=(0.12*len(prediction_matrix), 2.5),
+        figsize=(max(0.12*len(prediction_matrix), 10), max(0.025**len(prediction_matrix), 2.5)),
     )
     seq_logo.style_xticks(anchor=0, spacing=5)
     seq_logo.ax.set_ylabel('Probability (%)')
