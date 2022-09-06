@@ -1,4 +1,6 @@
 import argparse
+import gzip
+import tempfile
 import time
 import typing as t
 from collections import Counter
@@ -14,6 +16,7 @@ from millify import millify
 from sklearn.metrics import accuracy_score
 from stmol import showmol
 
+import ampal
 from aposteriori.data_prep.create_frame_data_set import Codec, make_frame_dataset
 from design_utils.analyse_utils import (
     calculate_metrics,
@@ -28,6 +31,7 @@ from design_utils.utils import (
     get_rotamer_codec,
     lookup_blosum62,
     modify_pdb_with_input_property,
+    rm_tree,
 )
 from predict import load_dataset_and_predict
 from sample import main_sample
@@ -54,9 +58,11 @@ def _calculate_sequence_similarity_wrapper(real_seq: str, predicted_seq: str):
 
 @st.cache(show_spinner=False)
 def _build_aposteriori_dataset_wrapper(
-    path_to_pdb: Path, pdb_code: str, output_path: Path, workers: int
+    structure_path: Path, output_path: Path, workers: int
 ):
-    structure_path = path_to_pdb / pdb_code[1:3] / (pdb_code + ".pdb1.gz")
+    if "temp_timed_design" in str(structure_path):
+        output_path = structure_path.parent
+    pdb_code = structure_path.name.split(".pdb")[0]
     data_path = output_path / (pdb_code + ".hdf5")
     if data_path.exists():
         return data_path
@@ -69,7 +75,7 @@ def _build_aposteriori_dataset_wrapper(
             voxels_per_side=21,
             codec=Codec.CNOCBCA(),
             processes=workers,
-            is_pdb_gzipped=True,
+            is_pdb_gzipped=True if structure_path.suffix == ".gz" else False,
             require_confirmation=False,
             voxels_as_gaussian=True,
             voxelise_all_states=False,
@@ -78,19 +84,20 @@ def _build_aposteriori_dataset_wrapper(
 
 
 def _build_aposteriori_dataset_wrapper_property(
-    path_to_pdb: Path,
-    pdb_code: str,
-    output_path: Path,
+    structure_path: Path,
+    output_path: Path, # TODO This path should be changed if user uploads
     property_map: np.ndarray,
     workers: int,
     property: str,
 ):
+    if "temp_timed_design" in str(structure_path):
+        output_path = structure_path.parent
     output_path = output_path / property
     output_path.mkdir(parents=True, exist_ok=True)
-    structure_path = path_to_pdb / pdb_code[1:3] / (pdb_code + ".pdb1.gz")
     ampal_structure = modify_pdb_with_input_property(
         structure_path, property_map, property=property
     )
+    pdb_code = structure_path.name.split(".pdb")[0]
     # Create alphanumeric code based on polarity map:
     map_code = create_map_alphanumeric_code(property_map=property_map)
     polar_path = output_path / f"{pdb_code + map_code}.pdb1"
@@ -108,7 +115,7 @@ def _build_aposteriori_dataset_wrapper_property(
             voxels_per_side=21,
             codec=Codec.CNOCBCAP() if property == "polarity" else Codec.CNOCBCAQ(),
             processes=workers,
-            is_pdb_gzipped=False,
+            is_pdb_gzipped=True if structure_path.suffix == ".gz" else False,
             require_confirmation=False,
             voxels_as_gaussian=True,
             voxelise_all_states=False,
@@ -202,7 +209,17 @@ def predict_dataset(
     show_spinner=False, allow_output_mutation=True
 )  # Output mutation necessary as object changes as it is interacted with
 def show_pdb(pdb_code, label_res: t.Optional[str] = None):
-    xyzview = py3Dmol.view(query="pdb:" + pdb_code)
+    if isinstance(pdb_code, str):
+        xyzview = py3Dmol.view(query="pdb:" + pdb_code)
+    elif isinstance(pdb_code, Path):
+        if pdb_code.suffix ==".gz":
+            with gzip.open(str(pdb_code), "rb") as inf:
+                ampal_structure = ampal.load_pdb(inf.read().decode(), path=False)
+        else:
+            ampal_structure = ampal.load_pdb(pdb_code)
+        xyzview = py3Dmol.view(data=ampal_structure.pdb)
+    else:
+        raise ValueError(f"Unknown type passed to py3Dmol {type(pdb_code)}")
     xyzview.setStyle({"cartoon": {"color": "spectrum"}})
     xyzview.setBackgroundColor("#FFFFFF")
     # loop_resid_dict = {sw1_name: sw1_resids, sw2_name: sw2_resids}
@@ -313,11 +330,6 @@ def _draw_output_section(
     pdb_to_real_sequence,
 ):
     st.subheader(selected_pdb[:4] if len(selected_pdb) > 5 else selected_pdb)
-    try:
-        pdb_session = show_pdb(selected_pdb[:4])
-        showmol(pdb_session, height=500, width=640)
-    except:
-        pass
     # Show predicted sequence:
     st.subheader("Designed Sequence")
     st.code(pdb_to_sequence[selected_pdb])
@@ -690,8 +702,9 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
     pdb = st.sidebar.text_input("Enter a PDB Code:", value="1qys", placeholder="1qys")
     pdb = pdb.lower()
     st.sidebar.write("or")
-    dataset1 = st.sidebar.file_uploader(
-        label="Upload your backbone/PDB of interest", disabled=True
+    # TODO: Disable input pdb code if upload occurs
+    uploaded_pdb = st.sidebar.file_uploader(
+        label="Upload your backbone/PDB of interest", type=['pdb', 'pdb1'], help="Upload your .pdb or pdb1 file. Files are immediately deleted after the prediction.",
     )
     model = st.sidebar.selectbox(
         label="Choose your Model",
@@ -724,21 +737,33 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
             "Optimize sequences using Monte Carlo", key="mc"
         )
         sample_n_button = st.empty()
-        sample_n = sample_n_button.slider("Number of sequences to sample", 3, 300, 200)
+        sample_n = sample_n_button.slider("Number of sequences to generate", 3, 300, 200)
         temperature_button = st.empty()
-        temperature = temperature_button.slider("Temperature Factor", 0.1, 1.0, 1.0)
+        temperature = temperature_button.slider("Temperature Factor", 0.0, 1.0, 0.2, help=" A temperature factor can be applied to affect the distributions. A higher temperature factor will lead to more diverse sequences.")
     placeholder_run_button = st.sidebar.empty()
     result = placeholder_run_button.button("Run model", key="1")
     st.sidebar.markdown(
         "[Tell us what you think!](https://forms.office.com/Pages/ResponsePage.aspx?id=sAafLmkWiUWHiRCgaTTcYY_RqhHaishKsB4CsyQgPCxUOU9DQjhJU0s1QjZVVTNPU0xDVzlFTEhNMS4u)"
     )
-    if pdb not in all_pdbs:
-        st.sidebar.error("PDB code not found")
-        placeholder_run_button.button("Run model", disabled=True, key="4")
+    # If user has not uploaded a PDB - check it out
+    if not uploaded_pdb:
+        if pdb not in all_pdbs:
+            st.sidebar.error("PDB code not found")
+            placeholder_run_button.button("Run model", disabled=True, key="4")
+            structure_path = None
+        else:
+            structure_path = (
+                    path_to_pdb / pdb[1:3] / (pdb + ".pdb1.gz")
+            )  # This is the problem. We need to override this
+    # Else user has uploaded a structure
+    else:
+        # Create a temporary directory for the upload and then save file to it
+        temp_upload_dir = Path(tempfile.mkdtemp(suffix="temp_timed_design"))
+        structure_path = temp_upload_dir / uploaded_pdb.name
+        with open(structure_path, "w") as f:
+            f.write(uploaded_pdb.getvalue().decode("utf-8"))
+
     if model == "TIMED_polar" or model == "TIMED_charge":
-        structure_path = (
-            path_to_pdb / pdb[1:3] / (pdb + ".pdb1.gz")
-        )  # This is the problem. We need to override this
         residue_map, merged_sequence = create_residue_map_from_pdb(structure_path)
         model_property = "polarity" if model == "TIMED_polar" else "charge"
         property_map = convert_seq_to_property(merged_sequence, property=model_property)
@@ -780,7 +805,7 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
     return (
         model,
         result,
-        pdb,
+        structure_path,
         (
             placeholder_run_button,
             use_montecarlo_button,
@@ -799,6 +824,8 @@ def main(args):
     path_to_data = Path(args.path_to_data)
     path_to_models = Path(args.path_to_models)
     path_to_pdb = Path(args.path_to_pdb)
+    # Create output folder
+    path_to_data.mkdir(exist_ok=True)
     # Check path exists:
     assert (
         path_to_data.exists()
@@ -815,7 +842,7 @@ def main(args):
     (
         model,
         result,
-        pdb,
+        structure_path,
         (
             placeholder_run_button,
             use_montecarlo_button,
@@ -856,8 +883,7 @@ def main(args):
             t0_apo = time.time()
             if property_mode:
                 dataset = _build_aposteriori_dataset_wrapper_property(
-                    path_to_pdb=path_to_pdb,
-                    pdb_code=pdb,
+                    structure_path=structure_path,
                     output_path=path_to_data,
                     property_map=polarity_map,
                     workers=args.workers,
@@ -865,8 +891,7 @@ def main(args):
                 )
             else:
                 dataset = _build_aposteriori_dataset_wrapper(
-                    path_to_pdb=path_to_pdb,
-                    pdb_code=pdb,
+                    structure_path=structure_path,
                     output_path=path_to_data,
                     workers=args.workers,
                 )
@@ -875,12 +900,12 @@ def main(args):
         t0 = time.time()
         if property_mode:
             model_suffix = (
-                pdb
+                structure_path.name
                 + f"_{property_mode}_"
                 + create_map_alphanumeric_code(property_map=polarity_map)
             )
         else:
-            model_suffix = pdb
+            model_suffix = structure_path.name
         (
             flat_dataset_map,
             pdb_to_sequence,
@@ -899,6 +924,14 @@ def main(args):
             )
         # Print Results:
         st.title("Model Output")
+        if "temp_timed_design" in str(structure_path):
+            st.subheader(structure_path.name)
+        # Show pymol structure
+        pdb_session = show_pdb(structure_path)
+        showmol(pdb_session, height=500, width=640)
+        if "temp_timed_design" in str(structure_path):
+            with st.spinner("Deleting uploaded files and data..."):
+                rm_tree(structure_path.parent)
         # For each key in the dataset:
         for k in pdb_to_probability.keys():
             slice_seq, slice_real, real_metrics = _draw_output_section(

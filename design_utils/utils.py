@@ -19,6 +19,17 @@ from aposteriori.config import MAKE_FRAME_DATASET_VER, UNCOMMON_RESIDUE_DICT
 from aposteriori.data_prep.create_frame_data_set import DatasetMetadata
 
 
+def rm_tree(pth: Path):
+    # Removes all files in a directory and the directory. From https://stackoverflow.com/questions/50186904/pathlib-recursively-remove-directory
+    pth = Path(pth)
+    for child in pth.glob("*"):
+        if child.is_file():
+            child.unlink()
+        else:
+            rm_tree(child)
+    pth.rmdir()
+
+
 def load_pdb_from_path(structure_path: Path) -> ampal.Assembly:
     """
     Simple utility to load PDB file into ampal and deal with .gz / containers
