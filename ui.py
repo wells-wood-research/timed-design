@@ -924,7 +924,8 @@ def main(args):
             )
         # Print Results:
         st.title("Model Output")
-        st.subheader(structure_path.name)
+        if "temp_timed_design" in str(structure_path):
+            st.subheader(structure_path.name)
         # Show pymol structure
         pdb_session = show_pdb(structure_path)
         showmol(pdb_session, height=500, width=640)
