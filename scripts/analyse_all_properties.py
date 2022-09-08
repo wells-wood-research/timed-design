@@ -129,8 +129,8 @@ def main(args):
             analyse_pdb_path,
             zip(
                 all_af2_paths,
-                repeat(pdb_to_entropy),
                 repeat(args),
+                repeat(pdb_to_entropy),
             ),
         )
         p.close()
