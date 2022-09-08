@@ -53,10 +53,13 @@ def _extract_bfactor_from_polypeptide(assembly: ampal.Polypeptide):
     return bfactors
 
 
-def extract_bfactor_from_ampal(pdb_path):
+def extract_bfactor_from_ampal(pdb_path, load_pdb=True):
     all_b_factors = []
+    if load_pdb:
+        assembly = ampal.load_pdb(pdb_path)
+    else:
+        assembly = pdb_path
 
-    assembly = ampal.load_pdb(pdb_path)
     if isinstance(assembly, ampal.AmpalContainer):
         assembly = assembly[0]
     if isinstance(assembly, ampal.Assembly):
@@ -90,9 +93,12 @@ def _extract_packdensity_from_polypeptide(assembly: ampal.Assembly):
     return packdensity
 
 
-def extract_packdensity_from_ampal(pdb_path):
+def extract_packdensity_from_ampal(pdb, load_pdb=True):
     all_packdensity = []
-    assembly = ampal.load_pdb(pdb_path)
+    if load_pdb:
+        assembly = ampal.load_pdb(pdb)
+    else:
+        assembly = pdb
     if isinstance(assembly, ampal.AmpalContainer):
         assembly = assembly[0]
     if isinstance(assembly, ampal.Assembly):
