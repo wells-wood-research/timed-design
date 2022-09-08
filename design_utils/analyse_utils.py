@@ -92,7 +92,7 @@ def _extract_packdensity_from_polypeptide(assembly: ampal.Assembly, atom_filter:
         current_density = -1
         for atom in res:
             if filter_set:
-                if atom.element in filter_set:  # Only backbone atoms
+                if atom.res_label in filter_set:  # Only backbone atoms
                     if current_density == -1:
                         current_density = atom.tags["packing density"]
                     else:
@@ -100,7 +100,7 @@ def _extract_packdensity_from_polypeptide(assembly: ampal.Assembly, atom_filter:
                             current_density + atom.tags["packing density"]
                         ) / 2
             else:
-                if atom.element != "H":
+                if atom.res_label != "H":
                     if current_density == -1:
                         current_density = atom.tags["packing density"]
                     else:
