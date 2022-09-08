@@ -51,14 +51,14 @@ def analyse_pdb_path(curr_path, args, pdb_to_entropy):
             reference_pdb.sequences[0]
         ), f"Length of reference sequence and current pdb do not match for {pdb}: {len(curr_pdb.sequences[0])} vs {len(reference_pdb.sequences[0])}"
     except AssertionError:
-        return [model, pdb, n, temp, np.nan, np.nan, np.nan]
+        return [model, pdb, n, temp, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]
     # Calculate accuracy:
     seq_accuracy = metrics.accuracy_score(
         list(curr_pdb.sequences[0]), list(reference_pdb.sequences[0])
     )
     # Calculate Packing Density:
-    curr_packdensity = extract_packdensity_from_ampal(curr_pdb, load_pdb=False)
-    real_packdensity = extract_packdensity_from_ampal(reference_pdb, load_pdb=False)
+    curr_packdensity = extract_packdensity_from_ampal(curr_pdb, load_pdb=False, atom_filter=args.atom_filter_function)
+    real_packdensity = extract_packdensity_from_ampal(reference_pdb, load_pdb=False, atom_filter=args.atom_filter_function)
     # Extract AF2 IDDT:
     curr_bfactor = extract_bfactor_from_ampal(curr_pdb, load_pdb=False)
     curr_entropy = pdb_to_entropy[pdb]
@@ -152,6 +152,14 @@ if __name__ == "__main__":
         "--timed_pred_folder",
         type=str,
         help="Path to folder with predictions per model",
+    )
+    parser.add_argument(
+        "--atom_filter_function",
+        default='all',
+        type=str,
+        nargs='?',
+        choices=['all', 'ca', 'backbone'],
+        help="Which atoms to consider for the packing density",
     )
     parser.add_argument("--workers", type=int, help="Path to input file")
     # Launch PyMol:

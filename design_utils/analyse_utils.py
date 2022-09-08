@@ -74,7 +74,16 @@ def extract_bfactor_from_ampal(pdb_path, load_pdb=True):
     return all_b_factors
 
 
-def _extract_packdensity_from_polypeptide(assembly: ampal.Assembly):
+def _extract_packdensity_from_polypeptide(assembly: ampal.Assembly, atom_filter: str):
+    if atom_filter == "backbone":
+        filter_set = ("N", "CA", "C", "O")
+    elif atom_filter == "ca":
+        filter_set = ("CA")
+    elif atom_filter == "all":
+        filter_set = None
+    else:
+        raise ValueError(f"Atom Filter function {atom_filter} not in (backbone, ca, all)")
+
     packdensity = []
     tag_packing_density(assembly)
     # Extract iddt for each residue
@@ -82,18 +91,28 @@ def _extract_packdensity_from_polypeptide(assembly: ampal.Assembly):
         # All the atoms have the same bfactor (iddt) so select first atom:
         current_density = -1
         for atom in res:
-            if atom.element != "H":  # Hydrogen has no packing density
-                if current_density == -1:
-                    current_density = atom.tags["packing density"]
-                else:
-                    current_density = (
-                        current_density + atom.tags["packing density"]
-                    ) / 2
+            if filter_set:
+                if atom.element in filter_set:  # Only backbone atoms
+                    if current_density == -1:
+                        current_density = atom.tags["packing density"]
+                    else:
+                        current_density = (
+                            current_density + atom.tags["packing density"]
+                        ) / 2
+            else:
+                if atom.element != "H":
+                    if current_density == -1:
+                        current_density = atom.tags["packing density"]
+                    else:
+                        current_density = (
+                            current_density + atom.tags["packing density"]
+                        ) / 2
+
         packdensity.append(current_density)
     return packdensity
 
 
-def extract_packdensity_from_ampal(pdb, load_pdb=True):
+def extract_packdensity_from_ampal(pdb, load_pdb=True, atom_filter: str = "ca"):
     all_packdensity = []
     if load_pdb:
         assembly = ampal.load_pdb(pdb)
@@ -102,7 +121,7 @@ def extract_packdensity_from_ampal(pdb, load_pdb=True):
     if isinstance(assembly, ampal.AmpalContainer):
         assembly = assembly[0]
     if isinstance(assembly, ampal.Assembly):
-        packdensity = _extract_packdensity_from_polypeptide(assembly)
+        packdensity = _extract_packdensity_from_polypeptide(assembly, atom_filter)
         all_packdensity.append(packdensity)
 
     return all_packdensity
