@@ -109,7 +109,7 @@ def main(args):
     args.pdb_path = Path(args.pdb_path)
     args.timed_pred_folder = Path(args.timed_pred_folder)
 
-    model = args.af2_results_path.parent.name
+    model = args.af2_results_path.name
     model_pred_path = args.timed_pred_folder / (model + ".csv")
     model_map_path = args.timed_pred_folder / (model + ".txt")
     assert model_map_path.exists(), f"File not found {model_map_path}"
