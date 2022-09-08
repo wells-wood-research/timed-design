@@ -61,7 +61,7 @@ def analyse_pdb_path(curr_path, args, pdb_to_entropy):
     real_packdensity = extract_packdensity_from_ampal(reference_pdb, load_pdb=False)
     # Extract AF2 IDDT:
     curr_bfactor = extract_bfactor_from_ampal(curr_pdb, load_pdb=False)
-    curr_entropy = pdb_to_entropy[pdb[:4]]
+    curr_entropy = pdb_to_entropy[pdb]
     # Add to results
     curr_results = [
         model,
