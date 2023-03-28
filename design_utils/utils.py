@@ -547,6 +547,8 @@ def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str):
             pdb = pdb.split("_0")[0]
         if len(pdb) == 4:
             pdb += chain
+        else:
+            pdb = pdb[:4] + chain
         if pdb not in count_dict:
             count_dict[pdb] = 0
 
@@ -650,14 +652,10 @@ def extract_sequence_from_pred_matrix(
             pdb, count = flat_dataset_map[i]
             count = int(count)
             # chain = ""
-        if "_" in pdb:
+        if len(pdb) == 5:
             pdbchain = pdb
-            is_consensus = True
         else:
-            if len(pdb) == 5:
-                pdbchain = pdb
-            else:
-                pdbchain = pdb + chain
+            pdbchain = pdb + chain
         # Prepare the dictionaries:
         if pdbchain not in pdb_to_sequence:
             pdb_to_sequence[pdbchain] = ""
