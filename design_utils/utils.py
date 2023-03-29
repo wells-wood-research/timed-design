@@ -644,6 +644,7 @@ def extract_sequence_from_pred_matrix(
     previous_count = 0
     old_datasetmap = True if len(flat_dataset_map[0]) == 4 else False
     for i in range(len(flat_dataset_map)):
+        chain = None
         # Add support for different dataset maps:
         if old_datasetmap:
             pdb, chain, _, res = flat_dataset_map[i]
@@ -651,11 +652,12 @@ def extract_sequence_from_pred_matrix(
         else:
             pdb, count = flat_dataset_map[i]
             count = int(count)
-            # chain = ""
         if len(pdb) == 5:
             pdbchain = pdb
+        elif chain:
+            pdbchain = pdb[:4] + chain
         else:
-            pdbchain = pdb + "A"
+            pdbchain = pdb[:4] + "A"
         # Prepare the dictionaries:
         if pdbchain not in pdb_to_sequence:
             pdb_to_sequence[pdbchain] = ""

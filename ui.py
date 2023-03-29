@@ -35,7 +35,7 @@ from design_utils.utils import (
 )
 from predict import load_dataset_and_predict
 from sample import main_sample
-
+from matplotlib.pyplot import imread
 
 # {{{ Cached Wrappers
 @st.cache(show_spinner=False)
@@ -82,7 +82,6 @@ def _build_aposteriori_dataset_wrapper(
             verbosity=2,
         )
     return data_path
-
 
 def _build_aposteriori_dataset_wrapper_property(
     structure_path: Path,
@@ -330,8 +329,10 @@ def _draw_output_section(
     pdb_to_probability,
     pdb_to_sequence,
     pdb_to_real_sequence,
+    path_to_data,
+    model_name,
 ):
-    st.subheader(selected_pdb[:4] if len(selected_pdb) > 5 else selected_pdb)
+    st.subheader(selected_pdb[:5] if len(selected_pdb) > 5 else selected_pdb)
     # Show predicted sequence:
     st.subheader("Designed Sequence")
     st.code(pdb_to_sequence[selected_pdb])
@@ -493,7 +494,7 @@ def _draw_output_section(
     f_3 = np.core.defchararray.add(f_2, ")")
     datamap_to_idx = dict(zip(f_3, range(len(f_3))))
     option = st.selectbox(
-        "Explore probabilities at specific positions:", (f_3), key="option"
+        "Explore probabilities at specific positions:", (f_3), key=f"option"
     )
     if "reload" in st.session_state.keys():
         pdb_session2 = show_pdb(selected_pdb[:4], st.session_state.option)
@@ -508,9 +509,16 @@ def _draw_output_section(
     # Plot Residue Composition:
     st.write("Residue Composition")
     st.altair_chart(chart_residue_comp, use_container_width=False)
+
     # Show sequence logo:
-    fig = create_sequence_logo(np.array(pdb_to_probability[selected_pdb]))
-    placeholder_seq_logo.pyplot(fig)
+    output_fig_path= path_to_data / f"{model_name}{selected_pdb}.png"
+    if Path(output_fig_path).exists():
+        fig = imread(output_fig_path)
+        placeholder_seq_logo.image(fig)
+    else:
+        fig = create_sequence_logo(np.array(pdb_to_probability[selected_pdb]))
+        fig.savefig(output_fig_path, format="png")
+        placeholder_seq_logo.pyplot(fig)
     return slice_seq, slice_real, real_metrics
 
 
@@ -524,7 +532,7 @@ def _draw_performance_section(selected_pdb, slice_seq, slice_real, res, axis_lab
     # Plot Performance Metrics:
 
     st.title(
-        f"Performance Metrics {selected_pdb[:4] if len(selected_pdb) > 5 else selected_pdb}"
+        f"Performance Metrics {selected_pdb[:5] if len(selected_pdb) > 5 else selected_pdb}"
     )
     results_dict = _calculate_metrics_wrapper(slice_seq, slice_real)
     st.subheader("Descriptive Metrics")
@@ -944,6 +952,8 @@ def main(args):
                 pdb_to_probability,
                 pdb_to_sequence,
                 pdb_to_real_sequence,
+                path_to_data,
+                model, # TODO just added - must check
             )
             _draw_performance_section(k, slice_seq, slice_real, res, axis_labels)
             if "mc_3" in st.session_state.keys():
