@@ -79,6 +79,7 @@ def _build_aposteriori_dataset_wrapper(
             require_confirmation=False,
             voxels_as_gaussian=True,
             voxelise_all_states=False,
+            verbosity=2,
         )
     return data_path
 
@@ -115,10 +116,11 @@ def _build_aposteriori_dataset_wrapper_property(
             voxels_per_side=21,
             codec=Codec.CNOCBCAP() if property == "polarity" else Codec.CNOCBCAQ(),
             processes=workers,
-            is_pdb_gzipped=True if structure_path.suffix == ".gz" else False,
+            is_pdb_gzipped=False, #True if polar_path.suffix == ".gz" else False,
             require_confirmation=False,
             voxels_as_gaussian=True,
             voxelise_all_states=False,
+            verbosity=2,
         )
     return data_path
 
