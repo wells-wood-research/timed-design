@@ -601,6 +601,7 @@ def extract_sequence_from_pred_matrix(
     prediction_matrix: np.ndarray,
     rotamers_categories: t.List[str],
     old_datasetmap: bool = False,
+    is_consensus: bool = False
 ) -> (dict, dict, dict, dict, dict):
     """
     Extract sequence from prediction matrix and create pdb_to_sequence and
@@ -628,8 +629,7 @@ def extract_sequence_from_pred_matrix(
     pdb_to_real_sequence = {}
     pdb_to_consensus = {}
     pdb_to_consensus_prob = {}
-    # Whether the dataset contains multiple states of NMR or not
-    is_consensus = False
+
     res_to_r_dic = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
     if rotamers_categories:
         if len(rotamers_categories[0]) == 1:
@@ -655,7 +655,7 @@ def extract_sequence_from_pred_matrix(
         if len(pdb) == 5:
             pdbchain = pdb
         else:
-            pdbchain = pdb + chain
+            pdbchain = pdb + "A"
         # Prepare the dictionaries:
         if pdbchain not in pdb_to_sequence:
             pdb_to_sequence[pdbchain] = ""

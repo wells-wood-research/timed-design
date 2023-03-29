@@ -34,6 +34,7 @@ def load_dataset_and_predict(
     blacklist: Path = None,
     predict_rotamers: bool = False,
     model_name_suffix: str = "",
+    is_consensus: bool = False,
 ) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
     """
     Load discretized frame dataset (should be the same format as the trained models),
@@ -53,12 +54,32 @@ def load_dataset_and_predict(
         Which batch to start from. In case the code crashes you can check which
         was the last batch used and restart from there. Make sure you remove the
         other models from the paths to be used.
+    dataset_map_path: Path
+        Path to the dataset map
+    blacklist: Path
+        Path to blacklist of structures to be filtered out (ie. not predicted)
+    predict_rotamers: Bool
+        Whether to predict 338 classes of rotamers or just the 20 amino acids
+    model_name_suffix: str
+        Suffix to be added to predictions which indicates model name
+    is_consensus: Bool
+        Whether the structure is NMR and the prediction should be a consensus of all the states
 
     Returns
     -------
     flat_dataset_map: t.List[t.Tuple]
         List of tuples with the order
         [... (pdb_code, chain_id, residue_id,  residue_label, encoded_residue) ...]
+    pdb_to_sequence: dict
+        Dictionary {pdb_code: predicted_sequence}
+    pdb_to_probability: dict
+        Dictionary {pdb_code: probability}
+    pdb_to_real_sequence: dict
+        Dictionary {pdb_code: sequence}
+    pdb_to_consensus: dict
+        Dictionary {pdb_code: consensus_sequence}
+    pdb_to_consensus_prob: dict
+        Dictionary {pdb_code: consensus_probability}
     """
     # Import top3 accuracy:
     tf.keras.utils.get_custom_objects()["top_3_cat_acc"] = top_3_cat_acc
@@ -153,6 +174,7 @@ def load_dataset_and_predict(
             prediction_matrix,
             rotamers_categories=flat_categories if predict_rotamers else None,
             old_datasetmap=old_datasetmap,
+            is_consensus=is_consensus,
         )
         save_dict_to_fasta(pdb_to_sequence, model_name)
         save_dict_to_fasta(pdb_to_real_sequence, "dataset")
@@ -208,6 +230,7 @@ def main(args):
         blacklist=args.path_to_blacklist,
         dataset_map_path=args.path_to_datasetmap,
         predict_rotamers=args.predict_rotamers,
+        is_consensus=args.is_structure_nmr,
     )
 
 
@@ -246,6 +269,11 @@ if __name__ == "__main__":
         "--predict_rotamers",
         action="store_true",
         help="Whether model outputs predictions for 338 rotamers (True) or 20 residues (False).",
+    )
+    parser.add_argument(
+        "--is_structure_nmr",
+        action="store_true",
+        help="Whether the structure is NMR. NMR will have different states so TIMED will try to build a consensus",
     )
     params = parser.parse_args()
     main(params)

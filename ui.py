@@ -712,7 +712,7 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
             "TIMED",
             "TIMED_polar",
             "TIMED_charge",
-            "TIMED_Deep",
+            "TIMED_deep",
             "TIMED_rotamer",
             "TIMED_rotamer_balanced",
             "TIMED_rotamer_not_so_deep",
@@ -929,8 +929,6 @@ def main(args):
         # Show pymol structure
         pdb_session = show_pdb(structure_path)
         showmol(pdb_session, height=500, width=640)
-        print(pdb_session)
-        raise ValueError
         if "temp_timed_design" in str(structure_path):
             with st.spinner("Deleting uploaded files and data..."):
                 rm_tree(structure_path.parent)
