@@ -604,6 +604,7 @@ def _draw_optimisation_section(
     temperature,
     real_metrics,
     pdb_to_real_sequence,
+    model_suffix,
 ):
     """
     Optimised Sequences using monte carlo.
@@ -615,7 +616,7 @@ def _draw_optimisation_section(
         - Extinction Coefficient
         - Sequence Similarity
     """
-    base = f"{model}{selected_pdb[:4]}"
+    base = f"{model}{model_suffix}"
     path_to_datasetmap = base + ".txt"
     if rotamer_mode:
         base += "_rot"
@@ -967,6 +968,7 @@ def main(args):
                         temperature,
                         real_metrics,
                         pdb_to_real_sequence,
+                        model_suffix
                     )
         with st.sidebar.expander("Advanced Settings"):
             use_montecarlo_button.checkbox(
