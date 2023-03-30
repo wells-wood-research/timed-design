@@ -232,7 +232,7 @@ def show_pdb(pdb_code, label_res: t.Optional[str] = None):
             _,
             chain,
         ) = label_res.split(" ")
-        resn = int(resn[-1])
+        resn = int(resn[3:])
         zoom_residue = [
             {"resi": int(resn)},
             {
