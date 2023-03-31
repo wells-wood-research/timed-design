@@ -219,8 +219,9 @@ def load_datasetmap(path_to_datasetmap: Path, is_old: bool = False) -> np.ndarra
             dtype=str,
             skip_header=3,
         )
+    dataset_map = np.asarray(dataset_map)
     # If list only contains 1 pdb, it fails to create a list of list [pdb_code, count]
-    if len(dataset_map) == 2:
+    if isinstance(dataset_map[0], str):
         dataset_map = [dataset_map]
 
     return dataset_map

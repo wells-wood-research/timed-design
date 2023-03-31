@@ -232,7 +232,7 @@ def show_pdb(pdb_code, label_res: t.Optional[str] = None):
             _,
             chain,
         ) = label_res.split(" ")
-        resn = int(resn[-1])
+        resn = int(resn[3:])
         zoom_residue = [
             {"resi": int(resn)},
             {
@@ -604,6 +604,7 @@ def _draw_optimisation_section(
     temperature,
     real_metrics,
     pdb_to_real_sequence,
+    model_suffix,
 ):
     """
     Optimised Sequences using monte carlo.
@@ -615,7 +616,7 @@ def _draw_optimisation_section(
         - Extinction Coefficient
         - Sequence Similarity
     """
-    base = f"{model}{selected_pdb[:4]}"
+    base = f"{model}{model_suffix}"
     path_to_datasetmap = base + ".txt"
     if rotamer_mode:
         base += "_rot"
@@ -648,7 +649,8 @@ def _draw_optimisation_section(
             sum_all_errors = opt_seq_metrics[curr_col + "_mae_norm"].to_numpy()
     opt_seq_metrics["summed_mae"] = sum_all_errors
     opt_seq_metrics.sort_values("summed_mae", inplace=True)
-    st.title(f"Optimized Sequence {selected_pdb}")
+    opt_seq_metrics = opt_seq_metrics[opt_seq_metrics['pdb'] == selected_pdb]
+    st.title(f"Top 3 Optimized Sequence {selected_pdb}")
     for seq in range(0, 3):
         curr_slice = opt_seq_metrics.iloc[[seq]].values.tolist()[0]
         curr_sequence = curr_slice[1]
@@ -967,6 +969,7 @@ def main(args):
                         temperature,
                         real_metrics,
                         pdb_to_real_sequence,
+                        model_suffix
                     )
         with st.sidebar.expander("Advanced Settings"):
             use_montecarlo_button.checkbox(
