@@ -219,8 +219,9 @@ def load_datasetmap(path_to_datasetmap: Path, is_old: bool = False) -> np.ndarra
             dtype=str,
             skip_header=3,
         )
+    dataset_map = np.asarray(dataset_map)
     # If list only contains 1 pdb, it fails to create a list of list [pdb_code, count]
-    if len(dataset_map) == 2:
+    if isinstance(dataset_map[0], str):
         dataset_map = [dataset_map]
 
     return dataset_map
@@ -547,6 +548,8 @@ def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str):
             pdb = pdb.split("_0")[0]
         if len(pdb) == 4:
             pdb += chain
+        else:
+            pdb = pdb[:4] + chain
         if pdb not in count_dict:
             count_dict[pdb] = 0
 
@@ -599,6 +602,7 @@ def extract_sequence_from_pred_matrix(
     prediction_matrix: np.ndarray,
     rotamers_categories: t.List[str],
     old_datasetmap: bool = False,
+    is_consensus: bool = False
 ) -> (dict, dict, dict, dict, dict):
     """
     Extract sequence from prediction matrix and create pdb_to_sequence and
@@ -626,8 +630,7 @@ def extract_sequence_from_pred_matrix(
     pdb_to_real_sequence = {}
     pdb_to_consensus = {}
     pdb_to_consensus_prob = {}
-    # Whether the dataset contains multiple states of NMR or not
-    is_consensus = False
+
     res_to_r_dic = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
     if rotamers_categories:
         if len(rotamers_categories[0]) == 1:
@@ -642,6 +645,7 @@ def extract_sequence_from_pred_matrix(
     previous_count = 0
     old_datasetmap = True if len(flat_dataset_map[0]) == 4 else False
     for i in range(len(flat_dataset_map)):
+        chain = None
         # Add support for different dataset maps:
         if old_datasetmap:
             pdb, chain, _, res = flat_dataset_map[i]
@@ -649,15 +653,12 @@ def extract_sequence_from_pred_matrix(
         else:
             pdb, count = flat_dataset_map[i]
             count = int(count)
-            # chain = ""
-        if "_" in pdb:
+        if len(pdb) == 5:
             pdbchain = pdb
-            is_consensus = True
+        elif chain:
+            pdbchain = pdb[:4] + chain
         else:
-            if len(pdb) == 5:
-                pdbchain = pdb
-            else:
-                pdbchain = pdb + chain
+            pdbchain = pdb[:4] + "A"
         # Prepare the dictionaries:
         if pdbchain not in pdb_to_sequence:
             pdb_to_sequence[pdbchain] = ""

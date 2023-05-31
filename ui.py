@@ -35,7 +35,7 @@ from design_utils.utils import (
 )
 from predict import load_dataset_and_predict
 from sample import main_sample
-
+from matplotlib.pyplot import imread
 
 # {{{ Cached Wrappers
 @st.cache(show_spinner=False)
@@ -79,9 +79,9 @@ def _build_aposteriori_dataset_wrapper(
             require_confirmation=False,
             voxels_as_gaussian=True,
             voxelise_all_states=False,
+            verbosity=2,
         )
     return data_path
-
 
 def _build_aposteriori_dataset_wrapper_property(
     structure_path: Path,
@@ -115,10 +115,11 @@ def _build_aposteriori_dataset_wrapper_property(
             voxels_per_side=21,
             codec=Codec.CNOCBCAP() if property == "polarity" else Codec.CNOCBCAQ(),
             processes=workers,
-            is_pdb_gzipped=True if structure_path.suffix == ".gz" else False,
+            is_pdb_gzipped=False, #True if polar_path.suffix == ".gz" else False,
             require_confirmation=False,
             voxels_as_gaussian=True,
             voxelise_all_states=False,
+            verbosity=2,
         )
     return data_path
 
@@ -231,7 +232,7 @@ def show_pdb(pdb_code, label_res: t.Optional[str] = None):
             _,
             chain,
         ) = label_res.split(" ")
-        resn = int(resn[-1])
+        resn = int(resn[3:])
         zoom_residue = [
             {"resi": int(resn)},
             {
@@ -328,8 +329,10 @@ def _draw_output_section(
     pdb_to_probability,
     pdb_to_sequence,
     pdb_to_real_sequence,
+    path_to_data,
+    model_name,
 ):
-    st.subheader(selected_pdb[:4] if len(selected_pdb) > 5 else selected_pdb)
+    st.subheader(selected_pdb[:5] if len(selected_pdb) > 5 else selected_pdb)
     # Show predicted sequence:
     st.subheader("Designed Sequence")
     st.code(pdb_to_sequence[selected_pdb])
@@ -491,7 +494,7 @@ def _draw_output_section(
     f_3 = np.core.defchararray.add(f_2, ")")
     datamap_to_idx = dict(zip(f_3, range(len(f_3))))
     option = st.selectbox(
-        "Explore probabilities at specific positions:", (f_3), key="option"
+        "Explore probabilities at specific positions:", (f_3), key=f"option"
     )
     if "reload" in st.session_state.keys():
         pdb_session2 = show_pdb(selected_pdb[:4], st.session_state.option)
@@ -506,9 +509,16 @@ def _draw_output_section(
     # Plot Residue Composition:
     st.write("Residue Composition")
     st.altair_chart(chart_residue_comp, use_container_width=False)
+
     # Show sequence logo:
-    fig = create_sequence_logo(np.array(pdb_to_probability[selected_pdb]))
-    placeholder_seq_logo.pyplot(fig)
+    output_fig_path= path_to_data / f"{model_name}{selected_pdb}.png"
+    if Path(output_fig_path).exists():
+        fig = imread(output_fig_path)
+        placeholder_seq_logo.image(fig)
+    else:
+        fig = create_sequence_logo(np.array(pdb_to_probability[selected_pdb]))
+        fig.savefig(output_fig_path, format="png")
+        placeholder_seq_logo.pyplot(fig)
     return slice_seq, slice_real, real_metrics
 
 
@@ -522,7 +532,7 @@ def _draw_performance_section(selected_pdb, slice_seq, slice_real, res, axis_lab
     # Plot Performance Metrics:
 
     st.title(
-        f"Performance Metrics {selected_pdb[:4] if len(selected_pdb) > 5 else selected_pdb}"
+        f"Performance Metrics {selected_pdb[:5] if len(selected_pdb) > 5 else selected_pdb}"
     )
     results_dict = _calculate_metrics_wrapper(slice_seq, slice_real)
     st.subheader("Descriptive Metrics")
@@ -594,6 +604,7 @@ def _draw_optimisation_section(
     temperature,
     real_metrics,
     pdb_to_real_sequence,
+    model_suffix,
 ):
     """
     Optimised Sequences using monte carlo.
@@ -605,7 +616,7 @@ def _draw_optimisation_section(
         - Extinction Coefficient
         - Sequence Similarity
     """
-    base = f"{model}{selected_pdb[:4]}"
+    base = f"{model}{model_suffix}"
     path_to_datasetmap = base + ".txt"
     if rotamer_mode:
         base += "_rot"
@@ -638,7 +649,8 @@ def _draw_optimisation_section(
             sum_all_errors = opt_seq_metrics[curr_col + "_mae_norm"].to_numpy()
     opt_seq_metrics["summed_mae"] = sum_all_errors
     opt_seq_metrics.sort_values("summed_mae", inplace=True)
-    st.title(f"Optimized Sequence {selected_pdb}")
+    opt_seq_metrics = opt_seq_metrics[opt_seq_metrics['pdb'] == selected_pdb]
+    st.title(f"Top 3 Optimized Sequence {selected_pdb}")
     for seq in range(0, 3):
         curr_slice = opt_seq_metrics.iloc[[seq]].values.tolist()[0]
         curr_sequence = curr_slice[1]
@@ -712,7 +724,7 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
             "TIMED",
             "TIMED_polar",
             "TIMED_charge",
-            "TIMED_Deep",
+            "TIMED_deep",
             "TIMED_rotamer",
             "TIMED_rotamer_balanced",
             "TIMED_rotamer_not_so_deep",
@@ -942,6 +954,8 @@ def main(args):
                 pdb_to_probability,
                 pdb_to_sequence,
                 pdb_to_real_sequence,
+                path_to_data,
+                model, # TODO just added - must check
             )
             _draw_performance_section(k, slice_seq, slice_real, res, axis_labels)
             if "mc_3" in st.session_state.keys():
@@ -955,6 +969,7 @@ def main(args):
                         temperature,
                         real_metrics,
                         pdb_to_real_sequence,
+                        model_suffix
                     )
         with st.sidebar.expander("Advanced Settings"):
             use_montecarlo_button.checkbox(
