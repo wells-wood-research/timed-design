@@ -17,7 +17,7 @@ from sklearn.metrics import accuracy_score
 from stmol import showmol
 
 import ampal
-from aposteriori.src.aposteriori.data_prep.create_frame_data_set import Codec, make_frame_dataset
+from aposteriori.data_prep.create_frame_data_set import Codec, make_frame_dataset
 from design_utils.analyse_utils import (
     calculate_metrics,
     calculate_seq_metrics,
