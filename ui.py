@@ -356,24 +356,28 @@ def _draw_output_section(
     st.write("Predicted Sequence Metrics")
     col1, col2, col3, col4 = st.columns(4)
     col1.metric(
-        "Charge",
-        f"{millify(predicted_metrics[0], precision=2)}",
-        f"{millify(predicted_metrics[0] - real_metrics[0], precision=2)}",
+        label = "Charge", 
+        value = f"{millify(predicted_metrics[0], precision=2)}",
+        delta = f"{millify(predicted_metrics[0] - real_metrics[0], precision=2)}",
+        help = "The overall electric charge of the protein"
     )
     col2.metric(
-        "Isoelectric Point",
-        f"{millify(predicted_metrics[1], precision=2)}",
-        f"{millify(predicted_metrics[1] - real_metrics[1], precision=2)}",
+        label = "Isoelectric Point",
+        value = f"{millify(predicted_metrics[1], precision=2)}",
+        delta = f"{millify(predicted_metrics[1] - real_metrics[1], precision=2)}",
+        help = "The pH at which this protein has no electrical charge"
     )
     col3.metric(
-        "Molecular Weight",
-        f"{millify(predicted_metrics[2], precision=2)}",
-        f"{millify(predicted_metrics[2] - real_metrics[2], precision=2)}",
+        label = "Molecular Weight",
+        value = f"{millify(predicted_metrics[2], precision=2)}",
+        delta = f"{millify(predicted_metrics[2] - real_metrics[2], precision=2)}",
+        help = "The sum of all atomic masses in the molecule"
     )
     col4.metric(
-        "Mol. Ext. Coeff. @ 280 nm",
-        f"{millify(predicted_metrics[3], precision=2)}",
-        f"{millify(predicted_metrics[3] - real_metrics[3], precision=2)}",
+        label = "Mol. Ext. Coeff. @ 280 nm",
+        value = f"{millify(predicted_metrics[3], precision=2)}",
+        delta = f"{millify(predicted_metrics[3] - real_metrics[3], precision=2)}",
+        help = "The strength the protein absorbs light at 280nm"
     )
     acc = accuracy_score(
         list(pdb_to_real_sequence[selected_pdb]), list(pdb_to_sequence[selected_pdb])
