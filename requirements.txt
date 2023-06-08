@@ -20,5 +20,5 @@ seaborn==0.11.2
 setuptools==62.1.0
 stmol==0.0.9
 streamlit==1.11.1
-tensorflow==2.7.2
+tensorflow==2.11.1
 tqdm==4.64.0
