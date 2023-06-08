@@ -14,7 +14,7 @@ numpy==1.22.3
 pandas==1.4.2
 py3Dmol==2.0.0.post2
 pytest==6.2.5
-requests==2.27.1
+requests==2.31.0
 scikit_learn==1.1.2
 seaborn==0.11.2
 setuptools==62.1.0
