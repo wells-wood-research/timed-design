@@ -18,6 +18,8 @@ from ampal.analyse_protein import (
     sequence_molar_extinction_280,
     sequence_molecular_weight,
 )
+from scipy.stats import entropy
+from isambard.evaluation.packing_density import tag_packing_density
 from matplotlib.figure import Figure
 from sklearn.metrics import (
     accuracy_score,
@@ -32,8 +34,154 @@ from tqdm import tqdm
 
 from aposteriori.data_prep.create_frame_data_set import _fetch_pdb
 from design_utils.scwrl_utils import pack_side_chains_scwrl
-from design_utils.utils import get_rotamer_codec
+from design_utils.utils import (
+    get_rotamer_codec,
+    load_datasetmap,
+    extract_sequence_from_pred_matrix,
+)
 from design_utils.utils import compress_rotamer_predictions_to_20
+
+
+def _extract_bfactor_from_polypeptide(assembly: ampal.Polypeptide):
+    bfactors = []
+    # Extract iddt for each residue
+    for res in assembly:
+        # All the atoms have the same bfactor (iddt) so select first atom:
+        first_atom = list(res.atoms.keys())[0]
+        curr_iddt = res.atoms[first_atom].tags["bfactor"]
+        bfactors.append(curr_iddt)
+    return bfactors
+
+
+def extract_bfactor_from_ampal(pdb_path, load_pdb=True):
+    all_b_factors = []
+    if load_pdb:
+        assembly = ampal.load_pdb(pdb_path)
+    else:
+        assembly = pdb_path
+
+    if isinstance(assembly, ampal.AmpalContainer):
+        assembly = assembly[0]
+    if isinstance(assembly, ampal.Assembly):
+        for assem in assembly:
+            if isinstance(assem, ampal.Polypeptide):
+                bfactors = _extract_bfactor_from_polypeptide(assem)
+                all_b_factors.append(bfactors)
+    elif isinstance(assembly, ampal.Polypeptide):
+        bfactors = _extract_bfactor_from_polypeptide(assembly)
+        all_b_factors.append(bfactors)
+
+    return all_b_factors
+
+
+def _extract_packdensity_from_polypeptide(assembly: ampal.Assembly, atom_filter: str):
+    if atom_filter == "backbone":
+        filter_set = ("N", "CA", "C", "O")
+    elif atom_filter == "ca":
+        filter_set = ("CA")
+    elif atom_filter == "all":
+        filter_set = None
+    else:
+        raise ValueError(f"Atom Filter function {atom_filter} not in (backbone, ca, all)")
+
+    packdensity = []
+    tag_packing_density(assembly)
+    # Extract iddt for each residue
+    for res in assembly[0]:
+        # All the atoms have the same bfactor (iddt) so select first atom:
+        current_density = -1
+        for atom in res:
+            if filter_set:
+                if atom.res_label in filter_set:  # Only backbone atoms
+                    if current_density == -1:
+                        current_density = atom.tags["packing density"]
+                    else:
+                        current_density = (
+                            current_density + atom.tags["packing density"]
+                        ) / 2
+            else:
+                if atom.res_label != "H":
+                    if current_density == -1:
+                        current_density = atom.tags["packing density"]
+                    else:
+                        current_density = (
+                            current_density + atom.tags["packing density"]
+                        ) / 2
+
+        packdensity.append(current_density)
+    return packdensity
+
+
+def extract_packdensity_from_ampal(pdb, load_pdb=True, atom_filter: str = "ca"):
+    all_packdensity = []
+    if load_pdb:
+        assembly = ampal.load_pdb(pdb)
+    else:
+        assembly = pdb
+    if isinstance(assembly, ampal.AmpalContainer):
+        assembly = assembly[0]
+    if isinstance(assembly, ampal.Assembly):
+        packdensity = _extract_packdensity_from_polypeptide(assembly, atom_filter)
+        all_packdensity.append(packdensity)
+
+    return all_packdensity
+
+
+def extract_prediction_entropy_to_dict(
+    model_pred_path, model_map_path, rotamer_mode=False, is_old=False
+):
+    assert model_pred_path.exists(), f"Model path {model_pred_path} does not exists."
+    assert model_map_path.exists(), f"Model path {model_map_path} does not exists."
+    # Load prediction matrix:
+    prediction_matrix = np.genfromtxt(model_pred_path, delimiter=",", dtype=np.float64)
+    # Load datasetmap
+    datasetmap = load_datasetmap(model_map_path, is_old=is_old)
+    if rotamer_mode:
+        # Get rotamer categories:
+        _, flat_categories = get_rotamer_codec()
+        # Get dictionary for 3 letter -> 1 letter conversion:
+        res_to_r = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
+        # Create flat categories of 1 letter amino acid for each of the 338 rotamers:
+        flat_categories = [res_to_r[res.split("_")[0]] for res in flat_categories]
+        # Extract dictionaries with sequences:
+    else:
+        _, flat_categories = None, None
+    (
+        pdb_to_sequence,
+        pdb_to_probability,
+        pdb_to_real_sequence,
+        _,
+        _,
+    ) = extract_sequence_from_pred_matrix(
+        datasetmap,
+        prediction_matrix,
+        rotamers_categories=flat_categories,
+        old_datasetmap=is_old,
+    )
+    pdb_to_entropy = {}
+    for pdb, prob in pdb_to_probability.items():
+        curr_entropy = calculate_prediction_entropy(prob)
+        pdb_to_entropy[pdb] = curr_entropy
+    return pdb_to_entropy
+
+
+def calculate_prediction_entropy(residue_predictions: t.List[float]) -> t.List[float]:
+    """
+    Calculates Shannon Entropy on predictions. From the TIMED repository.
+
+    Parameters
+    ----------
+    residue_predictions: list[float]
+        Residue probabilities for each position in sequence of shape (n, 20)
+        where n is the number of residues in sequence.
+
+    Returns
+    -------
+    entropy_arr: list[float]
+        Entropy of prediction for each position in sequence of shape (n,).
+    """
+    entropy_arr = entropy(residue_predictions, base=2, axis=1)
+    return entropy_arr
 
 
 def create_sequence_logo(prediction_matrix: np.ndarray) -> Figure:
@@ -54,18 +202,23 @@ def create_sequence_logo(prediction_matrix: np.ndarray) -> Figure:
     if prediction_matrix.shape[-1] == 338:
         prediction_matrix = compress_rotamer_predictions_to_20(prediction_matrix)
 
-    prediction_df = pd.DataFrame(prediction_matrix, columns=list(standard_amino_acids.keys()))
+    prediction_df = pd.DataFrame(
+        prediction_matrix, columns=list(standard_amino_acids.keys())
+    )
     # create Logo object
     seq_logo = logomaker.Logo(
         prediction_df,
         color_scheme="chemistry",
         vpad=0.1,
         width=0.8,
-        figsize=(max(0.12*len(prediction_matrix), 10), max(0.03**len(prediction_matrix), 2.5)),
+        figsize=(
+            max(0.12 * len(prediction_matrix), 10),
+            max(0.03 ** len(prediction_matrix), 2.5),
+        ),
     )
     seq_logo.style_xticks(anchor=0, spacing=5)
-    seq_logo.ax.set_ylabel('Probability (%)')
-    seq_logo.ax.set_xlabel('Residue Position')
+    seq_logo.ax.set_ylabel("Probability (%)")
+    seq_logo.ax.set_xlabel("Residue Position")
     return seq_logo.ax.get_figure()
 
 

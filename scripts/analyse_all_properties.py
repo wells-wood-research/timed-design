@@ -11,6 +11,11 @@ import ampal
 import numpy as np
 import pymol
 from sklearn import metrics
+from design_utils.analyse_utils import (
+    extract_packdensity_from_ampal,
+    extract_bfactor_from_ampal,
+    extract_prediction_entropy_to_dict,
+)
 
 
 def calculate_RMSD_and_gdt(pdb_original_path, pdb_predicted_path) -> (float, float):
@@ -25,24 +30,11 @@ def calculate_RMSD_and_gdt(pdb_original_path, pdb_predicted_path) -> (float, flo
     # Select only C alphas
     sel_ref += " and name CA"
     sel_model += " and name CA"
-    rmsd = cmd.cealign(target=sel_ref, mobile=sel_model)['RMSD']
-    cmd.cealign(target=sel_ref, mobile=sel_model, transform=0, object="aln")
-    mapping = cmd.get_raw_alignment("aln")
-    distances = []
-    for mapping_ in mapping:
-        try:
-            atom1 = f"{mapping_[0][0]} and id {mapping_[0][1]}"
-            atom2 = f"{mapping_[1][0]} and id {mapping_[1][1]}"
-            dist = cmd.get_distance(atom1, atom2)
-            cmd.alter(atom1, f"b = {dist:.4f}")
-            distances.append(dist)
-        except:
-            continue
-    distances = np.asarray(distances)
-    # TODO: Deal with distances in a better way
-    return rmsd, np.mean(distances)
+    rmsd = cmd.cealign(target=sel_ref, mobile=sel_model)["RMSD"]
+    return rmsd
 
-def analyse_pdb_path(curr_path, args):
+
+def analyse_pdb_path(curr_path, args, pdb_to_entropy):
     model, pdb, temp, n, af2_model = curr_path.name.split("_", maxsplit=4)
     # Load af2 pdb structures to sanitise input:
     curr_pdb = ampal.load_pdb(str(curr_path))
@@ -59,15 +51,38 @@ def analyse_pdb_path(curr_path, args):
             reference_pdb.sequences[0]
         ), f"Length of reference sequence and current pdb do not match for {pdb}: {len(curr_pdb.sequences[0])} vs {len(reference_pdb.sequences[0])}"
     except AssertionError:
-        return [model, pdb, n, temp, np.nan, np.nan, np.nan]
+        return [model, pdb, n, temp, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]
     # Calculate accuracy:
-    seq_accuracy = metrics.accuracy_score(list(curr_pdb.sequences[0]), list(reference_pdb.sequences[0]))
-    curr_results = [model, pdb, n, temp, seq_accuracy]
+    seq_accuracy = metrics.accuracy_score(
+        list(curr_pdb.sequences[0]), list(reference_pdb.sequences[0])
+    )
+    # Calculate Packing Density:
+    curr_packdensity = extract_packdensity_from_ampal(curr_pdb, load_pdb=False, atom_filter=args.atom_filter_function)
+    real_packdensity = extract_packdensity_from_ampal(reference_pdb, load_pdb=False, atom_filter=args.atom_filter_function)
+    # Extract AF2 IDDT:
+    curr_bfactor = extract_bfactor_from_ampal(curr_pdb, load_pdb=False)
+    curr_entropy = pdb_to_entropy[pdb]
+    # Add to results
+    curr_results = [
+        model,
+        pdb,
+        n,
+        temp,
+        seq_accuracy,
+        np.mean(curr_entropy),
+        np.std(curr_entropy),
+        np.mean(curr_packdensity),
+        np.std(curr_packdensity),
+        np.mean(real_packdensity),
+        np.std(real_packdensity),
+        np.mean(curr_bfactor),
+        np.std(curr_bfactor),
+    ]
     # Required purely to avoid bugs on files being corrupted:
     with tempfile.NamedTemporaryFile(
-            mode="w",
-            delete=True,
-            suffix=".pdb",
+        mode="w",
+        delete=True,
+        suffix=".pdb",
     ) as reference_pdb_tmp_path, tempfile.NamedTemporaryFile(
         mode="w",
         delete=True,
@@ -80,12 +95,11 @@ def analyse_pdb_path(curr_path, args):
         curr_pdb_tmp_path.write(reference_pdb.pdb)
         curr_pdb_tmp_path.seek(0)
         # Calculate metrics:
-        curr_rmsd, curr_gdt = calculate_RMSD_and_gdt(
+        curr_rmsd = calculate_RMSD_and_gdt(
             reference_pdb_tmp_path.name, curr_pdb_tmp_path.name
         )
         # Append current metrics
         curr_results.append(curr_rmsd)
-        curr_results.append(curr_gdt)
     # Pool all metrics together:
     return curr_results
 
@@ -93,6 +107,16 @@ def analyse_pdb_path(curr_path, args):
 def main(args):
     args.af2_results_path = Path(args.af2_results_path)
     args.pdb_path = Path(args.pdb_path)
+    args.timed_pred_folder = Path(args.timed_pred_folder)
+
+    model = args.af2_results_path.name
+    model_pred_path = args.timed_pred_folder / (model + ".csv")
+    model_map_path = args.timed_pred_folder / (model + ".txt")
+    assert model_map_path.exists(), f"File not found {model_map_path}"
+    assert model_pred_path.exists(), f"File not found {model_pred_path}"
+    pdb_to_entropy = extract_prediction_entropy_to_dict(
+        model_pred_path, model_map_path, rotamer_mode=True if "rot" in model else False
+    )
     assert (
         args.af2_results_path.exists()
     ), f"AF2 file path {args.af2_results_path} does not exist"
@@ -106,19 +130,37 @@ def main(args):
             zip(
                 all_af2_paths,
                 repeat(args),
+                repeat(pdb_to_entropy),
             ),
         )
         p.close()
     # Load results and save as csv:
     all_results = np.array(all_results)
-    np.savetxt(f"all_results_{all_results[0][0]}.csv", all_results, delimiter=",", fmt="%s")
-    np.savetxt(f"errors_{all_results[0][0]}.csv", np.array(error_log), delimiter=",", fmt="%s")
+    np.savetxt(
+        f"all_results_{all_results[0][0]}.csv", all_results, delimiter=",", fmt="%s"
+    )
+    np.savetxt(
+        f"errors_{all_results[0][0]}.csv", np.array(error_log), delimiter=",", fmt="%s"
+    )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--af2_results_path", type=str, help="Path to input file")
     parser.add_argument("--pdb_path", type=str, help="Path to input file")
+    parser.add_argument(
+        "--timed_pred_folder",
+        type=str,
+        help="Path to folder with predictions per model",
+    )
+    parser.add_argument(
+        "--atom_filter_function",
+        default='all',
+        type=str,
+        nargs='?',
+        choices=['all', 'ca', 'backbone'],
+        help="Which atoms to consider for the packing density",
+    )
     parser.add_argument("--workers", type=int, help="Path to input file")
     # Launch PyMol:
     params = parser.parse_args()
