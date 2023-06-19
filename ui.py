@@ -365,7 +365,7 @@ def _draw_output_section(
         label = "Isoelectric Point",
         value = f"{millify(predicted_metrics[1], precision=2)}",
         delta = f"{millify(predicted_metrics[1] - real_metrics[1], precision=2)}",
-        help = "The pH at which this protein has no electrical charge"
+        help = "The pH at which the designed protein has no electrical charge"
     )
     col3.metric(
         label = "Molecular Weight",
