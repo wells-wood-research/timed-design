@@ -30,18 +30,15 @@ RUN conda install -qy conda \
     && conda install -y -c conda-forge \
       cudatoolkit==${CUDA_VERSION} \
       pip \
-      python=3.8 
-
-RUN pip3 install --upgrade pip --no-cache-dir 
-RUN conda install -q poetry cython tqdm -y
-RUN conda install -c conda-forge -c schrodinger pymol-bundle -y
-RUN git clone https://github.com/wells-wood-research/aposteriori.git /app/aposteriori/
-WORKDIR /app/aposteriori/
-RUN git checkout upgrade-python
-RUN pip3 install .
+      python=3.8 \
+    && pip3 install --upgrade pip --no-cache-dir \
+    && conda install -c conda-forge -c schrodinger pymol-bundle -y \
+    && conda clean --all --force-pkgs-dirs --yes
 
 RUN git clone https://github.com/wells-wood-research/timed-design.git /app/timed-design
 WORKDIR /app/timed-design
-# TODO: Remove checkout
-RUN git checkout docker && pip3 install py3Dmol==2.0.0.post2 && pip3 install stmol==0.0.9 && pip3 install -r requirements_headless.txt --no-cache-dir && pip3 install .
-RUN conda clean --all --force-pkgs-dirs --yes
+COPY requirements.txt requirements_ui.txt ./
+RUN pip3 install -r requirements.txt \
+    && pip3 install -r requirements_ui.txt \
+    && pip3 install . \
+    && conda clean --all --force-pkgs-dirs --yes

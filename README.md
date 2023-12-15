@@ -11,15 +11,149 @@
 [timed-design](https://github.com/wells-wood-research/timed-design) is a library to use protein sequence design models and analyse predictions. We feature retrained Keras models for novel models (**TIMED** and **TIMED-rotamer**) as well as re-implementations of well known models for which code or model are not intuitively available (**ProDCoNN**, **DenseCPD**, **DenseNet**).
 
 ## Table of Contents:
-- [0. Introduction](#0-introduction)
+- [Install](#install)
 - [1. Use Models](#1-use-models)
 - [2. Sample Sequences Using Monte Carlo](#2-sample-sequences-using-monte-carlo)
 - [3. Analyse Rotamer Predictions](#3-analyse-rotamer-predictions)
 - [4. Cite This Work](#4-cite-this-work)
 
-## 0. Introduction
+## Install
 
-### Background
+1. Setting up conda:
+
+```
+conda create --name timed_design python=3.8
+```
+
+```
+conda activate timed_design
+```
+
+For GPU Support run:
+
+```
+conda install cudatoolkit cudnn cupti 
+```
+
+2. Install requirements for headless version (no UI):
+
+```
+pip install -r requirements.txt
+```
+
+3. Install requirements for UI:
+
+```
+pip install -r requirements_ui.txt
+```
+
+4. Install TIMED-Design:
+
+Install with pip:
+
+```
+pip install .
+```
+
+## 1. Use Models
+
+**File**: `predict.py`
+
+**Description**:  
+
+Use any model to predict a 3D structure. This requires a backbone in a .pdb structure. The side-chains of the residues will be automatically removed by [aposteriori](https://github.com/wells-wood-research/aposteriori), thus the prediction will be performed uniquely on the empty backbone. Your chosen model will attempt to predict which residues best fit the position and will return a `.fasta` file as well as a probability distribution in `.csv` format. 
+
+### 1.2 Design a Sequence
+
+1. Make a folder with all the pdb files you want to predict
+
+2. Create the dataset using aposteriori (For more info about other options, please see https://github.com/wells-wood-research/aposteriori/)
+
+```shell
+make-frame-dataset $YOUR_PDB_FOLDER  -e $YOUR_PDB_EXTENSION --voxels-per-side 21 --frame-edge-length 21 -g True -p 6 -n dataset -v -r -cb True -ae $YOUR_CODEC  --compression_gzip True -o .  --voxelise_all_states True
+```
+
+`$YOUR_PDB_FOLDER` is a path to your folders containing PDB files. These need to be all with the same format (e.g. `.pdb`)
+
+`$YOUR_PDB_EXTENSION` is the file extension of your PDB files in `$YOUR_PDB_FOLDER` 
+
+ `$YOUR_CODEC` This will normally be `CNOCBCA` except for TIMED_Charge `CNOCBCAQ` and TIMED_Polar `CNOCBCAP`
+
+For a sample dataset use:
+
+```shell
+poetry run make-frame-dataset aposteriori/tests/testing_files/pdb_files/ -e .pdb --name data --voxels-per-side 21 --frame-edge-length 21 -p 8  -vrz -cb False -ae CNOCBCA -g True 
+```
+
+
+3. Download your model of interest from:
+
+https://github.com/wells-wood-research/timed/releases
+
+4. Finally run: 
+
+
+```
+python3 predict.py --path_to_dataset $DATASET_PATH --path_to_model MODEL_PATH
+```
+
+eg.
+
+```
+python3 predict.py --path_to_dataset dataset.hdf5 --path_to_model timed.h5
+```
+
+### 1.3 Predicting Rotamers
+
+In order to use a rotamer model, use the flag `--predict_rotamers True`:
+
+
+```
+python3 predict.py --path_to_dataset dataset.hdf5 --path_to_model timed_rot.h5 --predict_rotamers True
+```
+
+### 1.4 Run User Interface (UI)
+
+To run the UI you must have `streamlit` installed. Then run:
+
+
+```
+streamlit run ui.py --  --path_to_models /models --path_to_pdb /pdb --path_to_data /data --workers 8
+```
+
+
+### 1.5 Install repository with pip
+
+Enter the directory if you are not:
+
+```
+cd timed-design 
+```
+
+Install with pip:
+
+```
+pip install .
+```
+
+
+
+## 2. Sample Sequences Using Monte Carlo
+
+**File**: `sample.py`
+**Description**:  
+
+Uses Monte Carlo sampling to sample sequences from a  probability distribution. A temperature factor can be applied to affect the distributions. It will return a `.fasta` file and/or a `.json` file with the sequences and a `.csv` file with basic sequence metrics such as isoelectric point, molecular weight and charge. Further metrics can be calculated using NetSolP-1.0 (see `scripts/run_netsolp.sh`).
+
+## 3. Analyse Rotamer Predictions
+
+**File**: `analyse_rotamers.py`
+**Description**:  
+
+---Under construction---
+
+
+## 4. Background
 
 Proteins are macro-molecules present in all living organisms (and viruses). They are involved in important chemical reactions in metabolism, DNA replication and also have structural properties. 
 
@@ -80,185 +214,7 @@ As the output of our models is a probability distribution, an alternative to pic
 
 We provide a simple CLI interface to generate several of these design which output to a `.fasta` file.
 
-
-## 1. Use Models
-
-**File**: `predict.py`
-
-**Description**:  
-
-Use any model to predict a 3D structure. This requires a backbone in a .pdb structure. The side-chains of the residues will be automatically removed by [aposteriori](https://github.com/wells-wood-research/aposteriori), thus the prediction will be performed uniquely on the empty backbone. Your chosen model will attempt to predict which residues best fit the position and will return a `.fasta` file as well as a probability distribution in `.csv` format. 
-
-### 1.1 Set up the environment
-
-1. Setting up conda:
-
-```
-conda create --name timed_design python=3.8
-```
-
-```
-conda activate timed_design
-```
-
-#### Easy Install:
-
-```
-sh setup.sh
-```
-
-#### Manual Install:
-
-
-2. Install poetry:
-
-```
-conda install poetry 
-```
-
-3. Install aposteriori (voxelisation of proteins)
-
-```
-git clone https://github.com/wells-wood-research/aposteriori.git
-```
-
-```
-cd aposteriori
-```
-
-```
-poetry install
-```
-
-You may have issues install cython, for which you should try installing it with conda:
-
-```
-conda install cython
-```
-
-Now install aposteriori with pip (when aposteriori will be published we may be able to use pypi)
-
-```
-pip install .
-```
-
-For GPU Support run:
-
-```
-conda install cudatoolkit cudnn cupti 
-```
-
-Move out of the `aposteriori` folder with `cd ..`. Then clone TIMED:
-
-```shell
-git clone https://github.com/wells-wood-research/timed.git
-```
-
-
-```shell
-cd timed
-```
-
-
-```shell
-poetry install
-```
-
-
-```shell
-pip install tqdm
-```
-
-### 1.2 Using the models for predicting
-
-1. Make a folder with all the pdb files you want to predict
-
-*Note:* Please use the same format for all the structures
-
-2. Create the dataset using aposteriori
-
-```shell
-make-frame-dataset YOUR_PDB_FOLDER  -e YOUR_PDB_EXTENSION --voxels-per-side 21 --frame-edge-length 21 -g True -p 6 -n dataset -v -r -cb True -ae CNOCBCA  --compression_gzip True -o .  --voxelise_all_states True
-```
-
-For more info about other options, please see https://github.com/wells-wood-research/aposteriori/
-
-for a sample dataset use:
-
-```shell
-poetry run make-frame-dataset aposteriori/tests/testing_files/pdb_files/ -e .pdb --name data --voxels-per-side 21 --frame-edge-length 21 -p 8  -vrz -cb False -ae CNOCBCA -g True 
-```
-
-
-3. Download your model of interest from:
-
-https://github.com/wells-wood-research/timed/releases
-
-3. Finally run: 
-
-
-```
-python3 predict.py --path_to_dataset {DATASET_PATH}.hdf5 --path_to_model {MODEL_PATH}.h5
-```
-
-eg.
-
-```
-python3 predict.py --path_to_dataset dataset.hdf5 --path_to_model timed_2.h5
-```
-
-### 1.3 Predicting Rotamers
-
-In order to use a rotamer model, use the flag `--predict_rotamers True`:
-
-
-```
-python3 predict.py --path_to_dataset dataset.hdf5 --path_to_model timed_rot.h5 --predict_rotamers True
-```
-
-### 1.4 Run User Interface (UI)
-
-To run the UI you must have `streamlit` installed. Then run:
-
-
-```
-streamlit run ui.py --  --path_to_models /models --path_to_pdb /pdb --path_to_data /data --workers 8
-```
-
----Online version coming soon---
-
-
-### 1.5 Install repository with pip
-
-Enter the directory if you are not:
-
-```
-cd timed-design 
-```
-
-Install with pip:
-
-```
-pip install .
-```
-
-
-
-## 2. Sample Sequences Using Monte Carlo
-
-**File**: `sample.py`
-**Description**:  
-
-Uses Monte Carlo sampling to sample sequences from a  probability distribution. A temperature factor can be applied to affect the distributions. It will return a `.fasta` file and/or a `.json` file with the sequences and a `.csv` file with basic sequence metrics such as isoelectric point, molecular weight and charge. Further metrics can be calculated using NetSolP-1.0 (see `scripts/run_netsolp.sh`).
-
-## 3. Analyse Rotamer Predictions
-
-**File**: `analyse_rotamers.py`
-**Description**:  
-
----Under construction---
-
-## 4. Cite This Work
+## 5. Cite This Work
 
 ```
 @software{leonardo_v_castorina_2022_6997495,

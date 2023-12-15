@@ -4,7 +4,11 @@ from pathlib import Path
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
 
-from design_utils.sampling_utils import apply_temp_to_probs, sample_with_multiprocessing, save_as
+from design_utils.sampling_utils import (
+    apply_temp_to_probs,
+    sample_with_multiprocessing,
+    save_as,
+)
 from design_utils.utils import (
     extract_sequence_from_pred_matrix,
     get_rotamer_codec,
@@ -72,7 +76,6 @@ def main_sample(args):
     #                             "4efpA", "4fcgA", "4fs7A", "4i1kA", "4le7A",
     #                             "4m4dA", "4ozwA", "4wp6A", "4y5jA", "5b1rA",
     #                             "5bufA", "5c12A", "5dicA", "6baqA"]
-    # # TODO: Improve implementation
     # pdb_codes = af2_benchmark_structures
     pdb_codes = list(pdb_to_probability.keys())
     print(
