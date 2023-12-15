@@ -49,7 +49,7 @@ pip install -r requirements_ui.txt
 
 4. Install TIMED-Design:
 
-Install with pip:
+Install TIMED-Design with pip:
 
 ```
 pip install .
@@ -82,13 +82,16 @@ make-frame-dataset $YOUR_PDB_FOLDER  -e $YOUR_PDB_EXTENSION --voxels-per-side 21
 For a sample dataset use:
 
 ```shell
-poetry run make-frame-dataset aposteriori/tests/testing_files/pdb_files/ -e .pdb --name data --voxels-per-side 21 --frame-edge-length 21 -p 8  -vrz -cb False -ae CNOCBCA -g True 
+make-frame-dataset tests/testing_files -e .pdb1 --name data --voxels-per-side 21 --frame-edge-length 21 -p 8  -vrz -cb False -ae CNOCBCA -g True
 ```
+
 
 
 3. Download your model of interest from:
 
-https://github.com/wells-wood-research/timed/releases
+https://github.com/wells-wood-research/timed-design/releases
+
+For example, download TIMED.h5 . Make sure to place it in this directory. 
 
 4. Finally run: 
 
@@ -100,7 +103,7 @@ python3 predict.py --path_to_dataset $DATASET_PATH --path_to_model MODEL_PATH
 eg.
 
 ```
-python3 predict.py --path_to_dataset dataset.hdf5 --path_to_model timed.h5
+python3 predict.py --path_to_dataset data.hdf5 --path_to_model TIMED.h5
 ```
 
 ### 1.3 Predicting Rotamers

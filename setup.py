@@ -22,7 +22,7 @@ setup(
     install_requires=[
         "altair==4.2.0",
         "ampal==1.5.1",
-        "aposteriori==3.0.0",
+        "aposteriori==2.2.0",
         "BUDEFF==1.0.0",
         "logomaker==0.8",
         "matplotlib==3.5.1",
@@ -34,7 +34,7 @@ setup(
         "setuptools==62.1.0",
         "stmol==0.0.9",
         "streamlit==1.11.1",
-        "tensorflow==2.11.1",
+        "tensorflow==2.13.0",
         "tqdm==4.64.0",
     ],
 )
