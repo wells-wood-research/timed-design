@@ -82,9 +82,8 @@ make-frame-dataset $YOUR_PDB_FOLDER  -e $YOUR_PDB_EXTENSION --voxels-per-side 21
 For a sample dataset use:
 
 ```shell
-make-frame-dataset tests/testing_files -e .pdb1 --name data --voxels-per-side 21 --frame-edge-length 21 -p 8  -vrz -cb False -ae CNOCBCA -g True
+make-frame-dataset tests/testing_files -e .pdb1 --name data --voxels-per-side 21 --frame-edge-length 21 -p 8  -vrz -cb True -ae CNOCBCA -g True
 ```
-
 
 
 3. Download your model of interest from:
