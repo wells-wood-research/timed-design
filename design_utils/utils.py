@@ -653,12 +653,11 @@ def extract_sequence_from_pred_matrix(
         else:
             pdb, count = flat_dataset_map[i]
             count = int(count)
-        if len(pdb) == 5:
-            pdbchain = pdb
-        elif chain:
-            pdbchain = pdb[:4] + chain
-        else:
+        # TODO: this line is not elegant in the way it handles 4 letter codes as PDB codes. It might lead to problems later on
+        if len(pdb) == 4:
             pdbchain = pdb[:4] + "A"
+        else:
+            pdbchain = pdb
         # Prepare the dictionaries:
         if pdbchain not in pdb_to_sequence:
             pdb_to_sequence[pdbchain] = ""
