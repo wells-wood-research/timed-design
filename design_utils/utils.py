@@ -546,10 +546,9 @@ def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str):
     for i, (pdb, chain, res_idx, _) in enumerate(flat_dataset_map):
         if "_0" in pdb:
             pdb = pdb.split("_0")[0]
+        # Add chain to PDB_code TODO: this is not robust in case the user has 4 letter name. Unsure what's the best way of dealing with this.
         if len(pdb) == 4:
             pdb += chain
-        else:
-            pdb = pdb[:4] + chain
         if pdb not in count_dict:
             count_dict[pdb] = 0
 
