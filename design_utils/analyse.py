@@ -17,9 +17,7 @@ def plot_mean_var_probs(prediction_matrix, model_name):
     plt.savefig(f"{model_name}_hist_var_mean.png")
 
 
-def plot_sequence_heatmap(pdb_to_consensus_prob, model_name):
-    sequences = ["1adnA", "1apoA", "1aq5A"]
-
+def plot_sequence_heatmap(pdb_to_consensus_prob, model_name, sequences = ["1adnA", "1apoA", "1aq5A"]):
     for seq in sequences:
         curr_prob = pdb_to_consensus_prob[seq]
         mean = np.mean(curr_prob, axis=1)
