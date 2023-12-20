@@ -1,4 +1,5 @@
 import argparse
+import os
 from math import ceil
 from pathlib import Path
 
@@ -35,6 +36,7 @@ def load_dataset_and_predict(
     predict_rotamers: bool = False,
     model_name_suffix: str = "",
     is_consensus: bool = False,
+    output_dir: str = ".",
 ) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
     """
     Load discretized frame dataset (should be the same format as the trained models),
@@ -117,10 +119,9 @@ def load_dataset_and_predict(
         # Import Model:
         frame_model = tf.keras.models.load_model(Path(m))
         # Create output file for model:
-        model_out = (
-            f"{model_name}" + "_rot.csv"
-            if predict_rotamers
-            else f"{model_name}" + ".csv"
+        model_out = os.path.join(
+            output_dir,
+            f"{model_name}_rot.csv" if predict_rotamers else f"{model_name}.csv"
         )
         # Load batch:
         for index in tqdm(
@@ -153,13 +154,13 @@ def load_dataset_and_predict(
             # Save current labels:
             y_true.extend(y_true_batch)
             # Save to output file:
-            save_outputs_to_file(y_true, y_pred, flat_dataset_map, i, model_name)
+            save_outputs_to_file(y_true, y_pred, flat_dataset_map, i, model_name, output_dir)
             # Reset to avoid memory errors
             del y_true
             del y_pred
         flat_dataset_map = np.array(flat_dataset_map)
         # Output datasetmap compatible with sequence recovery benchmark:
-        convert_dataset_map_for_srb(flat_dataset_map, model_name)
+        convert_dataset_map_for_srb(flat_dataset_map, model_name, output_dir)
         # Load prediction matrix
         prediction_matrix = genfromtxt(model_out, delimiter=",", dtype=np.float16)
         # Save as Fasta file:
@@ -176,12 +177,13 @@ def load_dataset_and_predict(
             old_datasetmap=old_datasetmap,
             is_consensus=is_consensus,
         )
-        save_dict_to_fasta(pdb_to_sequence, model_name)
-        save_dict_to_fasta(pdb_to_real_sequence, "dataset")
+        save_dict_to_fasta(pdb_to_sequence, model_name, output_dir)
+        save_dict_to_fasta(pdb_to_real_sequence, "dataset", output_dir)
         if pdb_to_consensus:
             save_dict_to_fasta(
                 pdb_to_consensus,
                 model_name + "_consensus",
+                output_dir,
             )
             save_consensus_probs(pdb_to_consensus_prob, model_name)
 
@@ -215,6 +217,7 @@ def main(args):
     assert (
         args.batch_size > 0
     ), f"Batch size must be higher than 0 but got {args.batch_size}"
+    os.makedirs(args.output_dir, exist_ok=True)
     (
         flat_dataset_map,
         pdb_to_sequence,
@@ -231,11 +234,19 @@ def main(args):
         dataset_map_path=args.path_to_datasetmap,
         predict_rotamers=args.predict_rotamers,
         is_consensus=args.is_structure_nmr,
+        output_dir=args.output_dir,
     )
+
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Predict with TIMED")
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default=".",
+        help="Directory to save output files"
+    )
     parser.add_argument(
         "--batch_size",
         type=int,

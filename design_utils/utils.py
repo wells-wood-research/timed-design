@@ -1,4 +1,4 @@
-import gzip, sys, random, string
+import gzip, sys, random, string, os
 import typing as t
 import warnings
 from itertools import product
@@ -17,7 +17,6 @@ from numpy import genfromtxt
 
 from aposteriori.config import MAKE_FRAME_DATASET_VER, UNCOMMON_RESIDUE_DICT
 from aposteriori.data_prep.create_frame_data_set import DatasetMetadata
-
 
 def rm_tree(pth: Path):
     # Removes all files in a directory and the directory. From https://stackoverflow.com/questions/50186904/pathlib-recursively-remove-directory
@@ -530,7 +529,7 @@ def load_batch(
     return X, y
 
 
-def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str):
+def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str, output_dir: str):
     """
     Converts datasetmap for compatibility with PDBench / Sequence recovery benchmark
 
@@ -540,7 +539,8 @@ def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str):
         Dataset map list
     model_name: str
         Name of model
-
+    output_dir: str
+        Directory where the txt file will be saved.
     """
     count_dict = {}
     for i, (pdb, chain, res_idx, _) in enumerate(flat_dataset_map):
@@ -553,8 +553,9 @@ def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str):
             count_dict[pdb] = 0
 
         count_dict[pdb] += 1
-
-    with open(f"{model_name}.txt", "w") as d:
+    
+    txt_file_path = os.path.join(output_dir, f"{model_name}.txt")
+    with open(txt_file_path, "w") as d:
         d.write("ignore_uncommon False\ninclude_pdbs\n##########\n")
         for pdb, count in count_dict.items():
             d.write(f"{pdb} {count}\n")
@@ -580,7 +581,7 @@ def save_consensus_probs(pdb_to_consensus_prob: dict, model_name: str):
             np.savetxt(p, predictions, delimiter=",")
 
 
-def save_dict_to_fasta(pdb_to_sequence: dict, model_name: str):
+def save_dict_to_fasta(pdb_to_sequence: dict, model_name: str, output_dir: str):
     """
     Saves a dictionary of protein sequences to a fasta file.
 
@@ -590,11 +591,14 @@ def save_dict_to_fasta(pdb_to_sequence: dict, model_name: str):
         Dictionary {pdb_code: predicted_sequence}
     model_name: str
         Name of the model.
+    output_dir: str
+        Directory where the fasta file will be saved.
     """
-    with open(f"{model_name}.fasta", "w") as f:
+    fasta_file_path = os.path.join(output_dir, f"{model_name}.fasta")
+
+    with open(fasta_file_path, "w") as f:
         for pdb, seq in pdb_to_sequence.items():
             f.write(f">{pdb}\n{seq}\n")
-
 
 def extract_sequence_from_pred_matrix(
     flat_dataset_map: t.List[t.Tuple],
@@ -716,6 +720,7 @@ def save_outputs_to_file(
     flat_dataset_map: t.List[t.Tuple],
     model: int,
     model_name: str,
+    output_dir:str,
 ):
     """
     Saves predictions for a specific model to file.
@@ -731,24 +736,30 @@ def save_outputs_to_file(
         [... (pdb_code, chain_id, residue_id,  residue_label, encoded_residue) ...]
     model: int
         Number of the model being used.
-    model_name: int
+    model_name: str
         Name of the model being used.
     """
+
+    encoded_labels_path = os.path.join(output_dir, "encoded_labels.csv")
+    datasetmap_path = os.path.join(output_dir, "datasetmap.txt")
+    predictions_path = os.path.join(output_dir, f"{model_name}.csv")
+
     # Save dataset map only at the beginning:
     if model == 0:
-        with open("../encoded_labels.csv", "a") as f:
+        with open(encoded_labels_path, "a") as f:
             y_true = np.asarray(y_true)
             np.savetxt(f, y_true, delimiter=",", fmt="%i")
+
     flat_dataset_map = np.asarray(flat_dataset_map)
-    # Save dataset map only at the beginning:
-    if Path("../datasetmap.txt").exists() == False:
-        with open("../datasetmap.txt", "a") as f:
+    # Save dataset map only if it does not exist
+    if Path(datasetmap_path).exists() == False:
+        with open(datasetmap_path, "a") as f:
             # Output Dataset Map to txt:
             np.savetxt(f, flat_dataset_map, delimiter=",", fmt="%s")
 
     predictions = np.array(y_pred[model], dtype=np.float16)
     # Output model predictions:
-    with open(f"{model_name}.csv", "a") as f:
+    with open(predictions_path, "a") as f:
         np.savetxt(f, predictions, delimiter=",")
 
 
