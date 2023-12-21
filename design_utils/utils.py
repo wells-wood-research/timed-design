@@ -1,4 +1,4 @@
-import gzip, sys, random, string, os
+import gzip, sys, random, string
 import typing as t
 import warnings
 from itertools import product
@@ -554,7 +554,7 @@ def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str, output_
 
         count_dict[pdb] += 1
     
-    txt_file_path = os.path.join(output_dir, f"{model_name}.txt")
+    txt_file_path = Path(output_dir) / f"{model_name}.txt"
     with open(txt_file_path, "w") as d:
         d.write("ignore_uncommon False\ninclude_pdbs\n##########\n")
         for pdb, count in count_dict.items():
@@ -594,7 +594,7 @@ def save_dict_to_fasta(pdb_to_sequence: dict, model_name: str, output_dir: str):
     output_dir: str
         Directory where the fasta file will be saved.
     """
-    fasta_file_path = os.path.join(output_dir, f"{model_name}.fasta")
+    fasta_file_path = Path(output_dir) / f"{model_name}.fasta"
 
     with open(fasta_file_path, "w") as f:
         for pdb, seq in pdb_to_sequence.items():
@@ -739,10 +739,9 @@ def save_outputs_to_file(
     model_name: str
         Name of the model being used.
     """
-
-    encoded_labels_path = os.path.join(output_dir, "encoded_labels.csv")
-    datasetmap_path = os.path.join(output_dir, "datasetmap.txt")
-    predictions_path = os.path.join(output_dir, f"{model_name}.csv")
+    encoded_labels_path = Path(output_dir) / "encoded_labels.csv"
+    datasetmap_path = Path(output_dir) / "datasetmap.txt"
+    predictions_path = Path(output_dir) / f"{model_name}.csv"
 
     # Save dataset map only at the beginning:
     if model == 0:

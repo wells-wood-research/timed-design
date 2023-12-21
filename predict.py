@@ -1,5 +1,4 @@
 import argparse
-import os
 from math import ceil
 from pathlib import Path
 
@@ -119,10 +118,7 @@ def load_dataset_and_predict(
         # Import Model:
         frame_model = tf.keras.models.load_model(Path(m))
         # Create output file for model:
-        model_out = os.path.join(
-            output_dir,
-            f"{model_name}_rot.csv" if predict_rotamers else f"{model_name}.csv"
-        )
+        model_out = Path(output_dir) / (f"{model_name}_rot.csv" if predict_rotamers else f"{model_name}.csv")
         # Load batch:
         for index in tqdm(
             range(start_batch, n_batches),
@@ -217,7 +213,7 @@ def main(args):
     assert (
         args.batch_size > 0
     ), f"Batch size must be higher than 0 but got {args.batch_size}"
-    os.makedirs(args.output_dir, exist_ok=True)
+    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     (
         flat_dataset_map,
         pdb_to_sequence,
@@ -245,7 +241,7 @@ if __name__ == "__main__":
         "--output_dir",
         type=str,
         default=".",
-        help="Directory to save output files"
+        help="Directory to save output files. Defaults to current working directory."
     )
     parser.add_argument(
         "--batch_size",
