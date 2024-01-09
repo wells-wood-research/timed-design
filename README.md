@@ -102,7 +102,7 @@ python3 predict.py --path_to_dataset $DATASET_PATH --path_to_model MODEL_PATH --
 eg.
 
 ```
-python3 predict.py --path_to_dataset data.hdf5 --path_to_model TIMED.h5 --output_dir test_outputs
+python3 predict.py --path_to_dataset data.hdf5 --path_to_model TIMED.h5 --output_dir .
 ```
 
 ### 1.3 Predicting Rotamers
