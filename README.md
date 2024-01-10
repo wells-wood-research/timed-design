@@ -41,13 +41,7 @@ conda install cudatoolkit cudnn cupti
 pip install -r requirements.txt
 ```
 
-3. Install requirements for UI:
-
-```
-pip install -r requirements_ui.txt
-```
-
-4. Install TIMED-Design:
+3. Install everything (TIMED-Design and UI):
 
 Install TIMED-Design with pip:
 
@@ -82,7 +76,7 @@ make-frame-dataset $YOUR_PDB_FOLDER  -e $YOUR_PDB_EXTENSION --voxels-per-side 21
 For a sample dataset use:
 
 ```shell
-make-frame-dataset tests/testing_files -e .pdb1 --name data --voxels-per-side 21 --frame-edge-length 21 -p 8  -vrz -cb True -ae CNOCBCA -g True
+make-frame-dataset tests/testing_files -e .pdb1.gz --name data --voxels-per-side 21 --frame-edge-length 21 -p 8  -vrz -cb True -ae CNOCBCA -g True
 ```
 
 
