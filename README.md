@@ -19,6 +19,13 @@
 
 ## Install
 
+0. Clone and move inside the TIMED-Design directory:
+
+```
+git clone https://github.com/wells-wood-research/timed-design.git
+cd timed-design
+```
+
 1. Setting up conda:
 
 ```
