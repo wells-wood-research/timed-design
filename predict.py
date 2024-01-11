@@ -213,7 +213,12 @@ def main(args):
     assert (
         args.batch_size > 0
     ), f"Batch size must be higher than 0 but got {args.batch_size}"
-    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    if not Path(args.output_dir).exists():
+        user_response = input(f"The directory '{args.output_dir}' does not exist. Do you want to create it? [y/n]: ")
+        if user_response.lower() == 'y':
+            Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+        else:
+            return
     (
         flat_dataset_map,
         pdb_to_sequence,
