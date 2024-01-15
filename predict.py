@@ -35,6 +35,7 @@ def load_dataset_and_predict(
     predict_rotamers: bool = False,
     model_name_suffix: str = "",
     is_consensus: bool = False,
+    path_to_output: Path = Path.cwd(),
 ) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
     """
     Load discretized frame dataset (should be the same format as the trained models),
@@ -64,7 +65,9 @@ def load_dataset_and_predict(
         Suffix to be added to predictions which indicates model name
     is_consensus: Bool
         Whether the structure is NMR and the prediction should be a consensus of all the states
-
+    path_to_output: Path
+        Path to output directory. Defaults to current working directory.
+        
     Returns
     -------
     flat_dataset_map: t.List[t.Tuple]
@@ -117,11 +120,7 @@ def load_dataset_and_predict(
         # Import Model:
         frame_model = tf.keras.models.load_model(Path(m))
         # Create output file for model:
-        model_out = (
-            f"{model_name}" + "_rot.csv"
-            if predict_rotamers
-            else f"{model_name}" + ".csv"
-        )
+        model_out = path_to_output / ("{model_name}" + "_rot.csv" if predict_rotamers else f"{model_name}" + ".csv")
         # Load batch:
         for index in tqdm(
             range(start_batch, n_batches),
@@ -153,13 +152,13 @@ def load_dataset_and_predict(
             # Save current labels:
             y_true.extend(y_true_batch)
             # Save to output file:
-            save_outputs_to_file(y_true, y_pred, flat_dataset_map, i, model_name)
+            save_outputs_to_file(y_true, y_pred, flat_dataset_map, i, model_name, path_to_output)
             # Reset to avoid memory errors
             del y_true
             del y_pred
         flat_dataset_map = np.array(flat_dataset_map)
         # Output datasetmap compatible with sequence recovery benchmark:
-        convert_dataset_map_for_srb(flat_dataset_map, model_name)
+        convert_dataset_map_for_srb(flat_dataset_map, model_name, path_to_output)
         # Load prediction matrix
         prediction_matrix = genfromtxt(model_out, delimiter=",", dtype=np.float16)
         # Save as Fasta file:
@@ -183,7 +182,7 @@ def load_dataset_and_predict(
                 pdb_to_consensus,
                 model_name + "_consensus",
             )
-            save_consensus_probs(pdb_to_consensus_prob, model_name)
+            save_consensus_probs(pdb_to_consensus_prob, model_name, path_to_output)
 
     return (
         flat_dataset_map,
@@ -200,6 +199,19 @@ def main(args):
     args.path_to_dataset = Path(args.path_to_dataset)
     args.path_to_model = Path(args.path_to_model)
     args.path_to_datasetmap = Path(args.path_to_datasetmap)
+    args.path_to_output = Path(args.path_to_output)
+    # check if output directory exists if not, ask the user if they want to create it
+    if not args.path_to_output.exists():
+        print(
+            f"Output directory at {args.path_to_output} does not exist. Do you want to create it? (y/n)"
+        )
+        user_input = input()
+        if user_input == "y":
+            args.path_to_output.mkdir(parents=True, exist_ok=True)
+        else:
+            print("Exiting...")
+            exit()
+
     if args.path_to_blacklist:
         args.path_to_blacklist = Path(args.path_to_blacklist)
         assert (
@@ -231,6 +243,7 @@ def main(args):
         dataset_map_path=args.path_to_datasetmap,
         predict_rotamers=args.predict_rotamers,
         is_consensus=args.is_structure_nmr,
+        path_to_output=args.path_to_output,
     )
 
 
@@ -259,6 +272,12 @@ if __name__ == "__main__":
         type=str,
         default=None,
         help="Path to csv file containing PDBs in the training set.",
+    )
+    parser.add_argument(
+        "--path_to_output",
+        type=str,
+        default=".",
+        help="Directory to save output files. Defaults to current working directory. If the directory does not exist, the user will be prompted to create it.",
     )
     parser.add_argument(
         "--output_analysis",
