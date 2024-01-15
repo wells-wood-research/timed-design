@@ -97,13 +97,13 @@ For example, download TIMED.h5 . Make sure to place it in this directory.
 
 
 ```
-python3 predict.py --path_to_dataset $DATASET_PATH --path_to_model MODEL_PATH
+python3 predict.py --path_to_dataset $DATASET_PATH --path_to_model MODEL_PATH --output_dir OUTPUT_DIRECTORY
 ```
 
 eg.
 
 ```
-python3 predict.py --path_to_dataset data.hdf5 --path_to_model TIMED.h5
+python3 predict.py --path_to_dataset data.hdf5 --path_to_model TIMED.h5 --output_dir .
 ```
 
 ### 1.3 Predicting Rotamers
