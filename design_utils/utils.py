@@ -593,7 +593,7 @@ def save_consensus_probs(
 
 
 def save_dict_to_fasta(
-    pdb_to_sequence: dict, model_name: str, output_dir: Path = Path.cwd()
+    pdb_to_sequence: dict, model_name: str, path_to_output: Path = Path.cwd(),
 ):
     """
     Saves a dictionary of protein sequences to a fasta file.
@@ -607,7 +607,7 @@ def save_dict_to_fasta(
     output_dir: Path
         Path to output directory. Defaults to current working directory.
     """
-    path_to_fasta = output_dir / f"{model_name}.fasta"
+    path_to_fasta = path_to_output / f"{model_name}.fasta"
     with open(path_to_fasta, "w") as f:
         for pdb, seq in pdb_to_sequence.items():
             f.write(f">{pdb}\n{seq}\n")
