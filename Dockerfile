@@ -29,16 +29,21 @@ ENV PATH="/opt/conda/bin:$PATH"
 RUN conda install -qy conda \
     && conda install -y -c conda-forge \
       cudatoolkit==${CUDA_VERSION} \
+      cudnn \
+      cupti \
       pip \
       python=3.8 \
     && pip3 install --upgrade pip --no-cache-dir \
-    && conda install -c conda-forge -c schrodinger pymol-bundle -y \
     && conda clean --all --force-pkgs-dirs --yes
 
 RUN git clone https://github.com/wells-wood-research/timed-design.git /app/timed-design
 WORKDIR /app/timed-design
-COPY requirements.txt requirements_ui.txt ./
 RUN pip3 install -r requirements.txt \
-    && pip3 install -r requirements_ui.txt \
     && pip3 install . \
     && conda clean --all --force-pkgs-dirs --yes
+
+# Create a data directory
+RUN mkdir -p /app/data
+
+# Set the default command to run the Streamlit app
+CMD ["streamlit", "run", "ui.py", "--server.maxUploadSize", "2", "--server.baseUrlPath", "timed", "--", "--path_to_models", "/scratch/timed_dataset/models/", "--path_to_pdb", "/scratch/datasets/biounit/", "--path_to_data", "/app/data/", "--workers", "12"]
