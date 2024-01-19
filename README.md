@@ -133,6 +133,13 @@ To run the UI you must have `streamlit` installed. Then run:
 streamlit run ui.py --  --path_to_models /models --path_to_pdb /pdb --path_to_data /data --workers 8
 ```
 
+If you prefer to use Docker, you can use the Dockerfile provided.
+
+```
+docker build -t timed_design .
+docker run -v /local/path/to/models/:/scratch/timed_dataset/models -v /local/path/to/biounit:/scratch/datasets/biounit -p 8501:8501 timed_design
+```
+
 
 ### 1.5 Install repository with pip
 
