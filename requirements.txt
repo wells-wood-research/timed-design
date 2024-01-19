@@ -1,7 +1,6 @@
 ampal==1.5.1
 aposteriori==2.3.0
 BUDEFF==1.0.0
-#isambard==2.3.1
 matplotlib==3.5.1
 requests==2.31.0
 scikit_learn==1.1.2

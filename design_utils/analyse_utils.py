@@ -19,7 +19,6 @@ from ampal.analyse_protein import (
     sequence_molecular_weight,
 )
 from scipy.stats import entropy
-from isambard.evaluation.packing_density import tag_packing_density
 from matplotlib.figure import Figure
 from sklearn.metrics import (
     accuracy_score,
@@ -41,8 +40,65 @@ from design_utils.utils import (
 )
 from design_utils.utils import compress_rotamer_predictions_to_20
 
+# input type is either ampal.Assembly or ampal.Polypeptide
+def tag_packing_density(
+    structure: t.Union[ampal.Polymer, ampal.Assembly], radius: float = 7
+) -> None:
+    """
+    Function from ISAMBARD written by 'Kathryn L. Shelley'
 
-def _extract_bfactor_from_polypeptide(assembly: ampal.Polypeptide):
+    Calculates the packing density of each non-hydrogen atom in a polymer
+    or assembly.
+
+    An atom's packing density is a measure of the number of atoms within
+    its local environment. There are several different methods of
+    calculating packing density; we use atomic contact number [1], which
+    is the number of non-hydrogen atoms within a specified radius (default
+    7 A [1]).
+
+    Parameters
+    ----------
+    structure : ampal.Polymer or ampal.Assembly
+        The structure to be tagged.
+    radius : float, optional
+        The radius (in Angstroms) within which to count atoms. Default is 7 A.
+
+    References
+    ----------
+    .. [1] Weiss MS (2007) On the interrelationship between atomic
+       displacement parameters (ADPs) and coordinates in protein
+       structures. *Acta Cryst.* D**63**, 1235-1242.
+    """
+
+    if not type(structure).__name__ in ["Polymer", "Assembly"]:
+        raise ValueError(
+            "Contact order can only be calculated for a polymer or an assembly."
+        )
+
+    atoms_list = [atom for atom in list(structure.get_atoms()) if atom.element != "H"]
+    atom_coords_array = np.array([atom.array for atom in atoms_list])
+
+    for index, atom in enumerate(atoms_list):
+        distances = np.sqrt(
+            np.square(atom_coords_array[:, :] - atom_coords_array[index, :]).sum(axis=1)
+        )
+        # Subtract 1 to correct for the atom itself being counted
+        atom.tags["packing density"] = np.sum(distances < radius) - 1
+
+
+def _extract_bfactor_from_polypeptide(assembly: ampal.Polypeptide) -> t.List[float]:
+    """
+    Extracts bfactor from ampal polypeptide
+
+    Parameters
+    ----------
+    assembly: ampal.Polypeptide
+        Ampal polypeptide to extract bfactor from.
+
+    Returns
+    -------
+
+    """
     bfactors = []
     # Extract iddt for each residue
     for res in assembly:
@@ -53,7 +109,23 @@ def _extract_bfactor_from_polypeptide(assembly: ampal.Polypeptide):
     return bfactors
 
 
-def extract_bfactor_from_ampal(pdb_path, load_pdb=True):
+def extract_bfactor_from_ampal(pdb_path: Path, load_pdb: bool = True) -> t.List[float]:
+    """
+    Extracts bfactor from ampal assembly or polypeptide
+
+    Parameters
+    ----------
+    pdb_path: Path
+        Path to pdb file or ampal assembly
+    load_pdb: bool
+        Whether to load pdb file or not
+
+    Returns
+    -------
+    all_b_factors: t.List[float]
+        List of bfactor for each residue in assembly or polypeptide
+
+    """
     all_b_factors = []
     if load_pdb:
         assembly = ampal.load_pdb(pdb_path)
@@ -74,15 +146,32 @@ def extract_bfactor_from_ampal(pdb_path, load_pdb=True):
     return all_b_factors
 
 
-def _extract_packdensity_from_polypeptide(assembly: ampal.Assembly, atom_filter: str):
+def _extract_packdensity_from_polypeptide(assembly: ampal.Assembly, atom_filter: str) -> t.List[float]:
+    """
+    Extracts packing density from ampal polypeptide
+
+    Parameters
+    ----------
+    assembly: ampal.Assembly
+        Ampal assembly to extract packing density from.
+    atom_filter: str
+        Atom filter function to use. Can be "backbone", "ca" or "all"
+
+    Returns
+    -------
+    packdensity: t.List[float]
+        List of packing density for each residue in assembly or polypeptide
+    """
     if atom_filter == "backbone":
         filter_set = ("N", "CA", "C", "O")
     elif atom_filter == "ca":
-        filter_set = ("CA")
+        filter_set = "CA"
     elif atom_filter == "all":
         filter_set = None
     else:
-        raise ValueError(f"Atom Filter function {atom_filter} not in (backbone, ca, all)")
+        raise ValueError(
+            f"Atom Filter function {atom_filter} not in (backbone, ca, all)"
+        )
 
     packdensity = []
     tag_packing_density(assembly)
@@ -112,7 +201,25 @@ def _extract_packdensity_from_polypeptide(assembly: ampal.Assembly, atom_filter:
     return packdensity
 
 
-def extract_packdensity_from_ampal(pdb, load_pdb=True, atom_filter: str = "ca"):
+def extract_packdensity_from_ampal(pdb: t.Union[str, Path], load_pdb: bool =True, atom_filter: str = "ca") -> t.List[float]:
+    """
+    Extracts packing density from ampal assembly or polypeptide
+
+    Parameters
+    ----------
+    pdb: t.Union[str, Path]
+        Path to pdb file or pdb string
+    load_pdb: bool
+        Whether to load pdb file or not
+    atom_filter: str
+        Atom filter function to use. Can be "backbone", "ca" or "all"
+
+    Returns
+    -------
+    all_packdensity: t.List[float]
+        List of packing density for each residue in assembly or polypeptide
+
+    """
     all_packdensity = []
     if load_pdb:
         assembly = ampal.load_pdb(pdb)
@@ -128,8 +235,27 @@ def extract_packdensity_from_ampal(pdb, load_pdb=True, atom_filter: str = "ca"):
 
 
 def extract_prediction_entropy_to_dict(
-    model_pred_path, model_map_path, rotamer_mode=False, is_old=False
-):
+    model_pred_path: Path, model_map_path: Path, rotamer_mode: bool=False, is_old: bool=False
+) -> dict:
+    """
+    Extracts prediction entropy from prediction matrix and datasetmap.
+
+    Parameters
+    ----------
+    model_pred_path: Path
+        Path to prediction matrix
+    model_map_path: Path
+        Path to datasetmap
+    rotamer_mode: bool
+        Whether to use rotamer mode or not
+    is_old: bool
+        Whether to use old datasetmap or not
+
+    Returns
+    -------
+    pdb_to_entropy: dict
+        Dictionary {pdb_code: entropy}
+    """
     assert model_pred_path.exists(), f"Model path {model_pred_path} does not exists."
     assert model_map_path.exists(), f"Model path {model_map_path} does not exists."
     # Load prediction matrix:
@@ -245,7 +371,7 @@ def calculate_seq_metrics(seq: str) -> t.Tuple[float, float, float, float]:
     return charge, iso_ph, mw, me
 
 
-def save_assembly_to_path(structure: ampal.Assembly, output_dir: Path, name: str):
+def save_assembly_to_path(structure: ampal.Assembly, output_dir: Path, name: str) -> None:
     """
     Saves ampal assembly to specified path.
 
@@ -499,7 +625,31 @@ def encode_sequence_to_onehot(pdb_to_sequence: dict, pdb_to_real_sequence: dict)
     return y_pred, y_true
 
 
-def calculate_metrics(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
+def calculate_metrics(pdb_to_sequence: dict, pdb_to_real_sequence: dict) -> dict:
+    """
+    Calculates useful metrics for sequence performance analysis. Metrics calculated are:
+        - Classification report (https://scikit-learn.org/0.15/modules/generated/sklearn.metrics.classification_report.html#sklearn.metrics.classification_report)
+        - Accuracy (top 1, 2, 3, 4, 5 accuracy)
+        - Macro Precision and Recall
+        - Prediction bias (https://developers.google.com/machine-learning/crash-course/classification/prediction-bias)
+        - Weighted / Unweighted confusion matrix
+        - Count of each residue in dataset
+        - Count of each residue in predictions
+
+
+    Parameters
+    ----------
+    pdb_to_sequence: dict
+        Dictionary {pdb_code: sequence}
+    pdb_to_real_sequence: dict
+        Dictionary {pdb_code: real_sequence}
+
+    Returns
+    -------
+    metrics: dict
+        Dictionary of metrics
+
+    """
     y_pred, y_true = encode_sequence_to_onehot(pdb_to_sequence, pdb_to_real_sequence)
     y_pred_argmax = np.argmax(y_pred, axis=1)
     y_true_argmax = np.argmax(y_true, axis=1)
@@ -584,7 +734,7 @@ def calculate_rotamer_metrics(
     rot_categories: t.List[str],
     suffix: str,
     output_path: Path,
-):
+) -> None:
     """
     Calculates useful metrics for rotamer performance analysis:
         - ROC AUC score (OVO)
