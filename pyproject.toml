@@ -13,6 +13,7 @@ dependencies = [
     "ampal==1.5.1",
     "aposteriori==2.3.0",
     "BUDEFF==1.0.0",
+    "ipython_genutils",
     "logomaker==0.8",
     "matplotlib==3.5.1",
     "millify==0.1.1",

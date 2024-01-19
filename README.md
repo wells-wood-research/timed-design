@@ -36,11 +36,6 @@ conda create --name timed_design python=3.8
 conda activate timed_design
 ```
 
-For GPU Support run:
-
-```
-conda install cudatoolkit cudnn cupti 
-```
 
 2. Install requirements for headless version (no UI):
 
@@ -55,6 +50,20 @@ Install TIMED-Design with pip:
 ```
 pip install .
 ```
+
+4. For GPU support. Of course, NVIDIA drivers will never work out of the box. In our servers we found
+this workaround to work:
+
+```
+conda install cudatoolkit cudnn cupti 
+export PATH=/usr/local/cuda/bin:$PATH
+pip install nvidia-cudnn-cu11==8.6.0.163
+CUDNN_PATH=$(dirname $(python -c "import nvidia.cudnn;print(nvidia.cudnn.__file__)"))
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib/:$CUDNN_PATH/lib
+python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+```
+
+
 
 ## 1. Use Models
 
