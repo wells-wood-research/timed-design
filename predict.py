@@ -175,8 +175,8 @@ def load_dataset_and_predict(
             old_datasetmap=old_datasetmap,
             is_consensus=is_consensus,
         )
-        save_dict_to_fasta(pdb_to_sequence, model_name)
-        save_dict_to_fasta(pdb_to_real_sequence, "dataset")
+        save_dict_to_fasta(pdb_to_sequence, model_name, path_to_output)
+        save_dict_to_fasta(pdb_to_real_sequence, "dataset", path_to_output)
         if pdb_to_consensus:
             save_dict_to_fasta(
                 pdb_to_consensus,
