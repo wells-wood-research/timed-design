@@ -530,7 +530,11 @@ def load_batch(
     return X, y
 
 
-def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str):
+def convert_dataset_map_for_srb(
+    flat_dataset_map: list,
+    model_name: str,
+    path_to_output: Path = Path.cwd(),
+):
     """
     Converts datasetmap for compatibility with PDBench / Sequence recovery benchmark
 
@@ -540,7 +544,8 @@ def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str):
         Dataset map list
     model_name: str
         Name of model
-
+    path_to_output: Path
+        Path to output directory. Defaults to current working directory.
     """
     count_dict = {}
     for i, (pdb, chain, res_idx, _) in enumerate(flat_dataset_map):
@@ -554,24 +559,31 @@ def convert_dataset_map_for_srb(flat_dataset_map: list, model_name: str):
 
         count_dict[pdb] += 1
 
-    with open(f"{model_name}.txt", "w") as d:
+    path_to_datasetmap = path_to_output / f"{model_name}.txt"
+    with open(path_to_datasetmap, "w") as d:
         d.write("ignore_uncommon False\ninclude_pdbs\n##########\n")
         for pdb, count in count_dict.items():
             d.write(f"{pdb} {count}\n")
 
 
-def save_consensus_probs(pdb_to_consensus_prob: dict, model_name: str):
+def save_consensus_probs(
+    pdb_to_consensus_prob: dict, model_name: str, path_to_output: Path = Path.cwd()
+):
     """
     Saves consensus sequence into PDBench-compatible format.
 
     Parameters
     ----------
     pdb_to_consensus_prob: dict
-
+        Dictionary {pdb_code: consensus_probabilities}
     model_name: dict
+        Name of the model
+    path_to_output: Path
+        Path to output directory. Defaults to current working directory.
 
     """
-    with open(f"{model_name}_consensus.txt", "w") as d, open(
+    path_to_consensus = path_to_output / f"{model_name}_consensus.txt"
+    with open(path_to_consensus, "w") as d, open(
         f"{model_name}_consensus.csv", "a"
     ) as p:
         d.write("ignore_uncommon False\ninclude_pdbs\n##########\n")
@@ -580,7 +592,9 @@ def save_consensus_probs(pdb_to_consensus_prob: dict, model_name: str):
             np.savetxt(p, predictions, delimiter=",")
 
 
-def save_dict_to_fasta(pdb_to_sequence: dict, model_name: str):
+def save_dict_to_fasta(
+    pdb_to_sequence: dict, model_name: str, path_to_output: Path = Path.cwd(),
+):
     """
     Saves a dictionary of protein sequences to a fasta file.
 
@@ -590,8 +604,11 @@ def save_dict_to_fasta(pdb_to_sequence: dict, model_name: str):
         Dictionary {pdb_code: predicted_sequence}
     model_name: str
         Name of the model.
+    output_dir: Path
+        Path to output directory. Defaults to current working directory.
     """
-    with open(f"{model_name}.fasta", "w") as f:
+    path_to_fasta = path_to_output / f"{model_name}.fasta"
+    with open(path_to_fasta, "w") as f:
         for pdb, seq in pdb_to_sequence.items():
             f.write(f">{pdb}\n{seq}\n")
 
@@ -601,7 +618,7 @@ def extract_sequence_from_pred_matrix(
     prediction_matrix: np.ndarray,
     rotamers_categories: t.List[str],
     old_datasetmap: bool = False,
-    is_consensus: bool = False
+    is_consensus: bool = False,
 ) -> (dict, dict, dict, dict, dict):
     """
     Extract sequence from prediction matrix and create pdb_to_sequence and
@@ -716,6 +733,7 @@ def save_outputs_to_file(
     flat_dataset_map: t.List[t.Tuple],
     model: int,
     model_name: str,
+    path_to_output: Path = Path.cwd(),
 ):
     """
     Saves predictions for a specific model to file.
@@ -733,22 +751,27 @@ def save_outputs_to_file(
         Number of the model being used.
     model_name: int
         Name of the model being used.
+    path_to_output: Path
+        Path to output directory. Defaults to current working directory.
     """
+    path_to_encoded_labels = path_to_output / "encoded_labels.csv"
+    path_to_datasetmap = path_to_output / "datasetmap.txt"
+    path_to_predictions = path_to_output / f"{model_name}.csv"
     # Save dataset map only at the beginning:
     if model == 0:
-        with open("../encoded_labels.csv", "a") as f:
+        with open(path_to_encoded_labels, "a") as f:
             y_true = np.asarray(y_true)
             np.savetxt(f, y_true, delimiter=",", fmt="%i")
     flat_dataset_map = np.asarray(flat_dataset_map)
     # Save dataset map only at the beginning:
-    if Path("../datasetmap.txt").exists() == False:
-        with open("../datasetmap.txt", "a") as f:
+    if path_to_datasetmap.exists() == False:
+        with open(path_to_datasetmap, "a") as f:
             # Output Dataset Map to txt:
             np.savetxt(f, flat_dataset_map, delimiter=",", fmt="%s")
 
     predictions = np.array(y_pred[model], dtype=np.float16)
     # Output model predictions:
-    with open(f"{model_name}.csv", "a") as f:
+    with open(path_to_predictions, "a") as f:
         np.savetxt(f, predictions, delimiter=",")
 
 
