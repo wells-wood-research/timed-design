@@ -1,4 +1,4 @@
-ARG CUDA=11.1.1
+ARG CUDA=12.0.0
 FROM nvidia/cuda:${CUDA}-cudnn8-runtime-ubuntu18.04
 # FROM directive resets ARGS, so we specify again (the value is retained if
 # previously set).
@@ -18,26 +18,38 @@ RUN apt-get update \
     && apt-get autoremove -y \
     && apt-get clean
 
-# Install Miniconda package manager.
+# Install Miniconda and set up the PATH
+ENV PATH="/opt/conda/bin:$PATH"
 RUN wget -q -P /tmp \
-  https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
+    https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
     && bash /tmp/Miniconda3-latest-Linux-x86_64.sh -b -p /opt/conda \
     && rm /tmp/Miniconda3-latest-Linux-x86_64.sh
 
-# Install conda packages.
-ENV PATH="/opt/conda/bin:$PATH"
-RUN conda install -qy conda \
-    && conda install -y -c conda-forge \
-      cudatoolkit==${CUDA_VERSION} \
+# Create a Conda environment with Python 3.8
+RUN conda create -n timed_design python=3.8 -y \
+    && echo "source activate timed_design" > ~/.bashrc
+
+# Activate the Conda environment
+ENV PATH /opt/conda/envs/timed_design/bin:$PATH
+
+# Install packages in the Conda environment
+RUN conda install -n timed_design -c conda-forge \
+      cudatoolkit \
       cudnn \
       cupti \
-      pip \
-      python=3.8 \
-    && pip3 install --upgrade pip --no-cache-dir \
+      pip -y \
+    && pip install --upgrade pip --no-cache-dir \
     && conda clean --all --force-pkgs-dirs --yes
 
+# Clone the repository
 RUN git clone https://github.com/wells-wood-research/timed-design.git /app/timed-design
+
+# Change the working directory
 WORKDIR /app/timed-design
+
+# Checkout the specific branch
+RUN git checkout feat/EASY-INSTALL
+
 RUN pip3 install -r requirements.txt \
     && pip3 install . \
     && conda clean --all --force-pkgs-dirs --yes
