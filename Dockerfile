@@ -47,9 +47,6 @@ RUN git clone https://github.com/wells-wood-research/timed-design.git /app/timed
 # Change the working directory
 WORKDIR /app/timed-design
 
-# Checkout the specific branch
-RUN git checkout feat/EASY-INSTALL
-
 RUN pip3 install -r requirements.txt \
     && pip3 install . \
     && conda clean --all --force-pkgs-dirs --yes
