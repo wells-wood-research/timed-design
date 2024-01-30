@@ -15,7 +15,8 @@
 - [1. Use Models](#1-use-models)
 - [2. Sample Sequences Using Monte Carlo](#2-sample-sequences-using-monte-carlo)
 - [3. Analyse Rotamer Predictions](#3-analyse-rotamer-predictions)
-- [4. Cite This Work](#4-cite-this-work)
+- [4. Background](#4-background)
+- [5. Cite This Work](#5-cite-this-work)
 
 ## Install
 
