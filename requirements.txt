@@ -4,6 +4,6 @@ matplotlib==3.5.1
 requests==2.31.0
 scikit_learn==1.1.2
 seaborn==0.11.2
-setuptools
+setuptools>=65.5.1
 tensorflow==2.13.0
 tqdm==4.64.0
