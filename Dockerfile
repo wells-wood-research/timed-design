@@ -47,12 +47,12 @@ RUN git clone https://github.com/wells-wood-research/timed-design.git /app/timed
 # Change the working directory
 WORKDIR /app/timed-design
 
-RUN pip3 install -r requirements.txt \
-    && pip3 install . \
-    && conda clean --all --force-pkgs-dirs --yes
+RUN source ~/.bashrc \
+    && pip install -r requirements.txt \
+    && pip install .
 
 # Create a data directory
 RUN mkdir -p /app/data
 
 # Set the default command to run the Streamlit app
-CMD ["streamlit", "run", "ui.py", "--server.maxUploadSize", "2", "--server.baseUrlPath", "timed", "--", "--path_to_models", "/scratch/timed_dataset/models/", "--path_to_pdb", "/scratch/datasets/biounit/", "--path_to_data", "/app/data/", "--workers", "12"]
+CMD ["streamlit", "run", "ui.py", "--client.showErrorDetails", "false","--server.maxUploadSize", "2", "--server.baseUrlPath", "timed", "--", "--path_to_models", "/scratch/timed_dataset/models/", "--path_to_pdb", "/scratch/datasets/biounit/", "--path_to_data", "/app/data/", "--workers", "12"]
