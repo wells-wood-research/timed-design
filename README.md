@@ -1,7 +1,7 @@
 <div align="center">
   <img src="img/logo.png" height="50%" width="50%"><br>
   <h2>Protein Sequence Design Made Easy</h2><br>
-<a href="https://zenodo.org/badge/latestdoi/427622709"><img src="https://zenodo.org/badge/427622709.svg" alt="DOI"></a>
+<a href="https://doi.org/10.1093/protein/gzae002"><img src="https://zenodo.org/badge/DOI/10.1093/protein/gzae002.svg" alt="DOI"></a>
 
   
 ![Demo Animation](https://raw.githubusercontent.com/universvm/timed-gif/main/demo.gif)
@@ -237,18 +237,17 @@ We provide a simple CLI interface to generate several of these design which outp
 ## 5. Cite This Work
 
 ```
-@software{leonardo_v_castorina_2022_6997495,
-  author       = {Leonardo V Castorina and
-                  Kartic Subr and
-                  Christopher W. Wood},
-  title        = {{TIMED-Design: Efficient Protein Sequence Design 
-                   with Deep Learning}},
-  month        = aug,
-  year         = 2022,
-  publisher    = {Zenodo},
-  version      = {v0.1-alpha},
-  doi          = {10.5281/zenodo.6997495},
-  url          = {https://doi.org/10.5281/zenodo.6997495}
+@article{timed,
+    author = {Castorina, Leonardo V and Ünal, Suleyman Mert and Subr, Kartic and Wood, Christopher W},
+    title = "{TIMED-Design: Flexible and Accessible Protein Sequence Design with Convolutional Neural Networks}",
+    journal = {Protein Engineering, Design and Selection},
+    pages = {gzae002},
+    year = {2024},
+    month = {01},
+    abstract = "{Sequence design is a crucial step in the process of designing or engineering proteins. Traditionally, physics-based methods have been used to solve for optimal sequences, with the main disadvantages being that they are computationally intensive for the end user. Deep learning based methods offer an attractive alternative, outperforming physics-based methods at a significantly lower computational cost.In this paper, we explore the application of Convolutional Neural Networks (CNNs) for sequence design. We describe the development and benchmarking of a range of networks, as well as reimplementations of previously described CNNs. We demonstrate the flexibility of representing proteins in a three-dimensional voxel grid by encoding additional design constraints into the input data. Finally, we describe TIMED-Design, a web application and command line tool for exploring and applying the models described in this paper.The User Interface (UI) will be available at the URL: https://pragmaticproteindesign.bio.ed.ac.uk/timed. The source code for TIMED-Design is available at https://github.com/wells-wood-research/timed-design.chris.wood@ed.ac.ukSupplementary data are available at Journal Name online.}",
+    issn = {1741-0126},
+    doi = {10.1093/protein/gzae002},
+    url = {https://doi.org/10.1093/protein/gzae002},
+    eprint = {https://academic.oup.com/peds/advance-article-pdf/doi/10.1093/protein/gzae002/56453873/gzae002.pdf},
 }
 ```
-
