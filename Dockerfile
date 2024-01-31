@@ -58,4 +58,4 @@ RUN source ~/.bashrc \
 RUN mkdir -p /app/data
 
 # Set the default command to run the Streamlit app
-CMD ["streamlit", "run", "ui.py", "--server.maxUploadSize", "2", "--server.baseUrlPath", "timed", "--", "--path_to_models", "/scratch/timed_dataset/models/", "--path_to_pdb", "/scratch/datasets/biounit/", "--path_to_data", "/app/data/", "--workers", "12", "--client.showErrorDetails", "false"]
+CMD ["streamlit", "run", "ui.py", "--client.showErrorDetails", "false","--server.maxUploadSize", "2", "--server.baseUrlPath", "timed", "--", "--path_to_models", "/scratch/timed_dataset/models/", "--path_to_pdb", "/scratch/datasets/biounit/", "--path_to_data", "/app/data/", "--workers", "12"]
