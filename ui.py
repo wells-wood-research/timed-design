@@ -37,6 +37,9 @@ from predict import load_dataset_and_predict
 from sample import main_sample
 from matplotlib.pyplot import imread
 
+# Set page title.
+st.set_page_config(page_title="TIMED Design")
+
 # {{{ Cached Wrappers
 @st.cache(show_spinner=False)
 def _calculate_seq_metrics_wrapper(seq: str):
