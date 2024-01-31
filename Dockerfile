@@ -47,6 +47,9 @@ RUN git clone https://github.com/wells-wood-research/timed-design.git /app/timed
 # Change the working directory
 WORKDIR /app/timed-design
 
+# Clone the repository
+RUN git checkout hide-streamlit-warnings
+
 RUN source ~/.bashrc \
     && pip install -r requirements.txt \
     && pip install .
