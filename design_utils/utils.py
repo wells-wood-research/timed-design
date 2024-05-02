@@ -670,15 +670,13 @@ def extract_sequence_from_pred_matrix(
             pdb, count = flat_dataset_map[i]
             count = int(count)
         # TODO: this line is not elegant in the way it handles 4 letter codes as PDB codes. It might lead to problems later on
-        if len(pdb) == 4:
-            pdbchain = pdb[:4] + "A"
-        else:
-            pdbchain = pdb
+
+        pdb += chain
         # Prepare the dictionaries:
-        if pdbchain not in pdb_to_sequence:
-            pdb_to_sequence[pdbchain] = ""
-            pdb_to_real_sequence[pdbchain] = ""
-            pdb_to_probability[pdbchain] = []
+        if pdb not in pdb_to_sequence:
+            pdb_to_sequence[pdb] = ""
+            pdb_to_real_sequence[pdb] = ""
+            pdb_to_probability[pdb] = []
         # Loop through map:
         for n in range(previous_count, previous_count + count):
             if old_datasetmap:
@@ -688,10 +686,10 @@ def extract_sequence_from_pred_matrix(
 
             pred = list(prediction_matrix[idx])
             curr_res = res_dic[max_idx[idx]]
-            pdb_to_probability[pdbchain].append(pred)
-            pdb_to_sequence[pdbchain] += curr_res
+            pdb_to_probability[pdb].append(pred)
+            pdb_to_sequence[pdb] += curr_res
             if old_datasetmap:
-                pdb_to_real_sequence[pdbchain] += res_to_r_dic[res]
+                pdb_to_real_sequence[pdb] += res_to_r_dic[res]
         if not old_datasetmap:
             previous_count += count
 
