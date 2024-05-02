@@ -13,7 +13,7 @@ from ampal.amino_acids import (
     polarity_Zimmerman,
     residue_charge,
 )
-from numpy import genfromtxt
+from numpy import genfromtxt, int16
 
 from aposteriori.config import MAKE_FRAME_DATASET_VER, UNCOMMON_RESIDUE_DICT
 from aposteriori.data_prep.create_frame_data_set import DatasetMetadata
@@ -521,7 +521,7 @@ def load_batch(
             X = np.zeros((batch_size, *dims), dtype=bool)
         y = np.zeros((batch_size, 20), dtype=float)
         # Extract frame from batch:
-        for i, (pdb_code, chain_id, residue_id, _) in enumerate(data_point_batch):
+        for i, (pdb_code, chain_id, residue_id, residue_label) in enumerate(data_point_batch):
             # Extract frame:
             residue_frame = np.asarray(dataset[pdb_code][chain_id][residue_id][()])
             X[i] = residue_frame
@@ -629,6 +629,8 @@ def extract_sequence_from_pred_matrix(
     flat_dataset_map: t.List[t.Tuple]
         List of tuples with the order
         [... (pdb_code, chain_id, residue_id,  residue_label, encoded_residue) ...]
+    resfix: t.List[int]
+        List of integers the user enters to fix certain aminoacid positions to be identical to WT and not be predicted.
     prediction_matrix: np.ndarray
         Prediction matrix for each of the sequence
 
@@ -646,6 +648,7 @@ def extract_sequence_from_pred_matrix(
     pdb_to_real_sequence = {}
     pdb_to_consensus = {}
     pdb_to_consensus_prob = {}
+
 
     res_to_r_dic = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
     if rotamers_categories:
@@ -669,8 +672,6 @@ def extract_sequence_from_pred_matrix(
         else:
             pdb, count = flat_dataset_map[i]
             count = int(count)
-        # TODO: this line is not elegant in the way it handles 4 letter codes as PDB codes. It might lead to problems later on
-
         pdb += chain
         # Prepare the dictionaries:
         if pdb not in pdb_to_sequence:
@@ -690,6 +691,7 @@ def extract_sequence_from_pred_matrix(
             pdb_to_sequence[pdb] += curr_res
             if old_datasetmap:
                 pdb_to_real_sequence[pdb] += res_to_r_dic[res]
+
         if not old_datasetmap:
             previous_count += count
 
@@ -713,7 +715,7 @@ def extract_sequence_from_pred_matrix(
             for m in max_idx:
                 curr_res = res_dic[m]
                 pdb_to_consensus[pdb] += curr_res
-
+        
         return (
             pdb_to_sequence,
             pdb_to_probability,
@@ -721,6 +723,7 @@ def extract_sequence_from_pred_matrix(
             pdb_to_consensus,
             pdb_to_consensus_prob,
         )
+
     else:
         return pdb_to_sequence, pdb_to_probability, pdb_to_real_sequence, None, None
 
@@ -1083,3 +1086,59 @@ blosum62 = {
     ("X", "Q"): -1,
     ("B", "B"): 4,
 }
+
+class StructureDataset():
+    def __init__(self, jsonl_file, verbose=True, truncate=None, max_length=100,
+        alphabet='ACDEFGHIKLMNPQRSTVWYX-'):
+        alphabet_set = set([a for a in alphabet])
+        discard_count = {
+            'bad_chars': 0,
+            'too_long': 0,
+            'bad_seq_length': 0
+        }
+
+        with open(jsonl_file) as f:
+            self.data = []
+
+            lines = f.readlines()
+            start = time.time()
+            for i, line in enumerate(lines):
+                entry = json.loads(line)
+                seq = entry['seq'] 
+                name = entry['name']
+
+                # Convert raw coords to np arrays
+                #for key, val in entry['coords'].items():
+                #    entry['coords'][key] = np.asarray(val)
+
+                # Check if in alphabet
+                bad_chars = set([s for s in seq]).difference(alphabet_set)
+                if len(bad_chars) == 0:
+                    if len(entry['seq']) <= max_length:
+                        if True:
+                            self.data.append(entry)
+                        else:
+                            discard_count['bad_seq_length'] += 1
+                    else:
+                        discard_count['too_long'] += 1
+                else:
+                    if verbose:
+                        print(name, bad_chars, entry['seq'])
+                    discard_count['bad_chars'] += 1
+
+                # Truncate early
+                if truncate is not None and len(self.data) == truncate:
+                    return
+
+                if verbose and (i + 1) % 1000 == 0:
+                    elapsed = time.time() - start
+                    print('{} entries ({} loaded) in {:.1f} s'.format(len(self.data), i+1, elapsed))
+            if verbose:
+                print('discarded', discard_count)
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+
