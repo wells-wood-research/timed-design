@@ -669,8 +669,6 @@ def extract_sequence_from_pred_matrix(
         else:
             pdb, count = flat_dataset_map[i]
             count = int(count)
-        # TODO: this line is not elegant in the way it handles 4 letter codes as PDB codes. It might lead to problems later on
-
         pdb += chain
         # Prepare the dictionaries:
         if pdb not in pdb_to_sequence:
