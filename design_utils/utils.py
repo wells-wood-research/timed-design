@@ -19,6 +19,90 @@ from aposteriori.config import MAKE_FRAME_DATASET_VER, UNCOMMON_RESIDUE_DICT
 from aposteriori.data_prep.create_frame_data_set import DatasetMetadata
 
 
+def customize_fixed_residues(
+    pdb_to_sequence, pdb_to_real_sequence, chains_to_customize, res_to_fix
+):
+    """
+
+    A function to customize TIMED predictions. When user gives --res_to_fix and --chains_to_customize
+    commands, the residues in a given chain will be fixed to the input structure residues, and rest of the protein
+    will be predicted normally.
+
+     Parameters
+    ----------
+    pdb_to_sequence: dict
+        Sequence as predicted by TIMED
+    pdb_to_real_sequence: dict
+        WT sequence
+    chains_to_customize: tuple
+        User specified chains where fixing of residues will be applied.
+    res_to_fix: tuple
+         Residue numbers for the fixed residues. This assumes that when the chain changes the residue number also starts from 1
+
+    """
+    mapping = {chain: res_to_fix[i] for i, chain in enumerate(chains_to_customize)}
+    print(mapping)
+    for chain, res_tuples in mapping.items():
+        for key, value in pdb_to_sequence.items():
+            if key.endswith(chain) and key in pdb_to_real_sequence:
+                real_sequence = pdb_to_real_sequence[key]
+                sequence = list(value)
+                for res_tuple in res_tuples:
+                    num = res_tuple
+                    # Specified residues should change in the prediction.
+                    if 0 <= num - 1 < min(len(sequence), len(real_sequence)):
+                        pdb_to_sequence[key] = (
+                            pdb_to_sequence[key][: num - 1]
+                            + pdb_to_real_sequence[key][num - 1]
+                            + pdb_to_sequence[key][num:]
+                        )
+
+
+def customize_predicted_residues(
+    pdb_to_sequence, pdb_to_real_sequence, chains_to_customize, res_to_predict
+):
+
+    """
+    A function to customize TIMED predictions. When user gives --res_to_predict and --chains_to_customize
+    commands, the residues in a given chain will be predicted and rest of the protein will be converted back to WT.
+
+     Parameters
+    ----------
+    pdb_to_sequence: dict
+        Sequence as predicted by TIMED
+    pdb_to_real_sequence: dict
+        WT sequence
+    chains_to_customize: tuple
+        User specified chains where predictions will be applied. Unspecified chains will be converted back to WT.
+    res_to_predict: tuple
+         Residue numbers for the predicting residues. This assumes that when the chain changes the residue number also starts from 1
+
+    """
+
+    mapping = {chain: res_to_predict[i] for i, chain in enumerate(chains_to_customize)}
+    for chain, res_tuples in mapping.items():
+        for key, value in pdb_to_sequence.items():
+            if key.endswith(chain) and key in pdb_to_real_sequence:
+                sequence = list(value)
+                for num in range(1, len(sequence)):
+                    # Specified residues should be kept as they are in pdb_to_sequence but rest should change.
+                    if num not in res_tuples:
+                        pdb_to_sequence[key] = (
+                            pdb_to_sequence[key][: num - 1]
+                            + pdb_to_real_sequence[key][num - 1]
+                            + pdb_to_sequence[key][num:]
+                        )
+            # If the chain is not specified to be predicted by TIMED, convert it back to WT.
+            elif not key.endswith(chain) and key in pdb_to_real_sequence:
+                sequence = list(value)
+                for num in range(1, len(sequence)):
+                    pdb_to_sequence[key] = (
+                        pdb_to_sequence[key][: num - 1]
+                        + pdb_to_real_sequence[key][num - 1]
+                        + pdb_to_sequence[key][num:]
+                    )
+
+
 def rm_tree(pth: Path):
     # Removes all files in a directory and the directory. From https://stackoverflow.com/questions/50186904/pathlib-recursively-remove-directory
     pth = Path(pth)
@@ -207,17 +291,10 @@ def load_datasetmap(path_to_datasetmap: Path, is_old: bool = False) -> np.ndarra
         path_to_datasetmap.suffix == ".txt"
     ), f"Expected Path {path_to_datasetmap} to be a .txt file but got {path_to_datasetmap.suffix}."
     if is_old:
-        dataset_map = np.genfromtxt(
-            path_to_datasetmap,
-            delimiter=",",
-            dtype=str,
-        )
+        dataset_map = np.genfromtxt(path_to_datasetmap, delimiter=",", dtype=str)
     else:
         dataset_map = np.genfromtxt(
-            path_to_datasetmap,
-            delimiter=" ",
-            dtype=str,
-            skip_header=3,
+            path_to_datasetmap, delimiter=" ", dtype=str, skip_header=3
         )
     dataset_map = np.asarray(dataset_map)
     # If list only contains 1 pdb, it fails to create a list of list [pdb_code, count]
@@ -485,8 +562,7 @@ def compress_rotamer_predictions_to_20(prediction_matrix: np.ndarray) -> np.ndar
 
 
 def load_batch(
-    dataset_path: Path,
-    data_point_batch: t.List[t.Tuple],
+    dataset_path: Path, data_point_batch: t.List[t.Tuple]
 ) -> (np.ndarray, np.ndarray):
     """
     Load batch from a dataset map.
@@ -531,9 +607,7 @@ def load_batch(
 
 
 def convert_dataset_map_for_srb(
-    flat_dataset_map: list,
-    model_name: str,
-    path_to_output: Path = Path.cwd(),
+    flat_dataset_map: list, model_name: str, path_to_output: Path = Path.cwd()
 ):
     """
     Converts datasetmap for compatibility with PDBench / Sequence recovery benchmark
@@ -593,7 +667,7 @@ def save_consensus_probs(
 
 
 def save_dict_to_fasta(
-    pdb_to_sequence: dict, model_name: str, path_to_output: Path = Path.cwd(),
+    pdb_to_sequence: dict, model_name: str, path_to_output: Path = Path.cwd()
 ):
     """
     Saves a dictionary of protein sequences to a fasta file.
@@ -615,6 +689,9 @@ def save_dict_to_fasta(
 
 def extract_sequence_from_pred_matrix(
     flat_dataset_map: t.List[t.Tuple],
+    res_to_predict: t.Tuple[t.Tuple],
+    res_to_fix: t.Tuple[t.Tuple],
+    chains_to_customize: t.Tuple[t.Tuple],
     prediction_matrix: np.ndarray,
     rotamers_categories: t.List[str],
     old_datasetmap: bool = False,
@@ -691,17 +768,41 @@ def extract_sequence_from_pred_matrix(
         if not old_datasetmap:
             previous_count += count
 
+    if chains_to_customize:
+        if res_to_fix and not res_to_predict:
+            customize_fixed_residues(
+                pdb_to_sequence, pdb_to_real_sequence, chains_to_customize, res_to_fix
+            )
+        elif res_to_predict and not res_to_fix:
+            customize_predicted_residues(
+                pdb_to_sequence,
+                pdb_to_real_sequence,
+                chains_to_customize,
+                res_to_predict,
+            )
+        elif not res_to_fix and not res_to_predict:
+            warnings.warn(
+                "No prompt was given to fix or predict residues. TIMED will make predictions for all the residues."
+            )
+        else:
+            warnings.warn(
+                "Both --res_to_fix and --res_to_predict flags were given. TIMED will make predictions for all the residues."
+            )
+
     if is_consensus:
         last_pdb = ""
         # Sum up probabilities:
         for pdb_chain in pdb_to_sequence.keys():
             curr_pdb = pdb_chain.split("_")[0]
             if last_pdb != curr_pdb:
-                pdb_to_consensus_prob[curr_pdb] = np.array(pdb_to_probability[pdb_chain])
+                pdb_to_consensus_prob[curr_pdb] = np.array(
+                    pdb_to_probability[pdb_chain]
+                )
                 last_pdb = curr_pdb
             else:
                 pdb_to_consensus_prob[curr_pdb] = (
-                    pdb_to_consensus_prob[curr_pdb] + np.array(pdb_to_probability[pdb_chain])
+                    pdb_to_consensus_prob[curr_pdb]
+                    + np.array(pdb_to_probability[pdb_chain])
                 ) / 2
         # Extract sequences from consensus probabilities:
         for pdb_chain in pdb_to_consensus_prob.keys():
