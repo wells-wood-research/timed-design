@@ -664,21 +664,17 @@ def extract_sequence_from_pred_matrix(
         chain = None
         # Add support for different dataset maps:
         if old_datasetmap:
-            pdb, chain, _, res = flat_dataset_map[i]
+            pdb_chain, chain, _, res = flat_dataset_map[i]
             count = 1
         else:
-            pdb, count = flat_dataset_map[i]
+            pdb_chain, count = flat_dataset_map[i]
             count = int(count)
-        # TODO: this line is not elegant in the way it handles 4 letter codes as PDB codes. It might lead to problems later on
-        if len(pdb) == 4:
-            pdbchain = pdb[:4] + "A"
-        else:
-            pdbchain = pdb
+        pdb_chain += chain
         # Prepare the dictionaries:
-        if pdbchain not in pdb_to_sequence:
-            pdb_to_sequence[pdbchain] = ""
-            pdb_to_real_sequence[pdbchain] = ""
-            pdb_to_probability[pdbchain] = []
+        if pdb_chain not in pdb_to_sequence:
+            pdb_to_sequence[pdb_chain] = ""
+            pdb_to_real_sequence[pdb_chain] = ""
+            pdb_to_probability[pdb_chain] = []
         # Loop through map:
         for n in range(previous_count, previous_count + count):
             if old_datasetmap:
@@ -688,33 +684,33 @@ def extract_sequence_from_pred_matrix(
 
             pred = list(prediction_matrix[idx])
             curr_res = res_dic[max_idx[idx]]
-            pdb_to_probability[pdbchain].append(pred)
-            pdb_to_sequence[pdbchain] += curr_res
+            pdb_to_probability[pdb_chain].append(pred)
+            pdb_to_sequence[pdb_chain] += curr_res
             if old_datasetmap:
-                pdb_to_real_sequence[pdbchain] += res_to_r_dic[res]
+                pdb_to_real_sequence[pdb_chain] += res_to_r_dic[res]
         if not old_datasetmap:
             previous_count += count
 
     if is_consensus:
         last_pdb = ""
         # Sum up probabilities:
-        for pdb in pdb_to_sequence.keys():
-            curr_pdb = pdb.split("_")[0]
+        for pdb_chain in pdb_to_sequence.keys():
+            curr_pdb = pdb_chain.split("_")[0]
             if last_pdb != curr_pdb:
-                pdb_to_consensus_prob[curr_pdb] = np.array(pdb_to_probability[pdb])
+                pdb_to_consensus_prob[curr_pdb] = np.array(pdb_to_probability[pdb_chain])
                 last_pdb = curr_pdb
             else:
                 pdb_to_consensus_prob[curr_pdb] = (
-                    pdb_to_consensus_prob[curr_pdb] + np.array(pdb_to_probability[pdb])
+                    pdb_to_consensus_prob[curr_pdb] + np.array(pdb_to_probability[pdb_chain])
                 ) / 2
         # Extract sequences from consensus probabilities:
-        for pdb in pdb_to_consensus_prob.keys():
-            pdb_to_consensus[pdb] = ""
-            curr_prob = pdb_to_consensus_prob[pdb]
+        for pdb_chain in pdb_to_consensus_prob.keys():
+            pdb_to_consensus[pdb_chain] = ""
+            curr_prob = pdb_to_consensus_prob[pdb_chain]
             max_idx = np.argmax(curr_prob, axis=1)
             for m in max_idx:
                 curr_res = res_dic[m]
-                pdb_to_consensus[pdb] += curr_res
+                pdb_to_consensus[pdb_chain] += curr_res
 
         return (
             pdb_to_sequence,
