@@ -498,21 +498,22 @@ def _draw_output_section(
     f_3 = np.core.defchararray.add(f_2, ")")
     datamap_to_idx = dict(zip(f_3, range(len(f_3))))
     chain_id = selected_dataset_map[:, 1]
+
+    unique_key = f"option_{chain_id}" # This is necessary to force the selectbox to update
     option = st.selectbox(
         "Explore probabilities at specific positions:",
         options=f_3,
-        key=f"option_{chain_id}"
-        # Append chain_id to the key
+        key=unique_key
     )
     if "reload" in st.session_state.keys():
-        pdb_session2 = show_pdb(selected_pdb[:4], st.session_state.option)
+        pdb_session2 = show_pdb(selected_pdb[:4], st.session_state[unique_key])
         showmol(pdb_session2, height=500, width=500)
-        idx_pos = datamap_to_idx[st.session_state.option]
+        idx_pos = datamap_to_idx[st.session_state[unique_key]]
         vals = pdb_to_probability[selected_pdb][idx_pos]
         df = pd.DataFrame(vals)
         df.fillna(0, inplace=True)
         df.index = flat_categories
-        st.subheader(f"Probability Distribution at position {st.session_state.option}")
+        st.subheader(f"Probability Distribution at position {st.session_state[unique_key]}")
         st.bar_chart(df, use_container_width=False)
     # Plot Residue Composition:
     st.write("Residue Composition")
