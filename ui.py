@@ -964,7 +964,6 @@ def main(args):
             with st.spinner("Deleting uploaded files and data..."):
                 rm_tree(structure_path.parent)
         # For each key in the dataset:
-        print(pdb_to_probability.keys())
         for k in pdb_to_probability.keys():
             slice_seq, slice_real, real_metrics = _draw_output_section(
                 k,
