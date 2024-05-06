@@ -86,9 +86,10 @@ def _build_aposteriori_dataset_wrapper(
         )
     return data_path
 
+
 def _build_aposteriori_dataset_wrapper_property(
     structure_path: Path,
-    output_path: Path, # TODO This path should be changed if user uploads
+    output_path: Path,  # TODO This path should be changed if user uploads
     property_map: np.ndarray,
     workers: int,
     property: str,
@@ -118,7 +119,7 @@ def _build_aposteriori_dataset_wrapper_property(
             voxels_per_side=21,
             codec=Codec.CNOCACBP() if property == "polarity" else Codec.CNOCACBQ(),
             processes=workers,
-            is_pdb_gzipped=False, #True if polar_path.suffix == ".gz" else False,
+            is_pdb_gzipped=False,  # True if polar_path.suffix == ".gz" else False,
             require_confirmation=False,
             voxels_as_gaussian=True,
             voxelise_all_states=False,
@@ -216,7 +217,7 @@ def show_pdb(pdb_code, label_res: t.Optional[str] = None):
     if isinstance(pdb_code, str):
         xyzview = py3Dmol.view(query="pdb:" + pdb_code)
     elif isinstance(pdb_code, Path):
-        if pdb_code.suffix ==".gz":
+        if pdb_code.suffix == ".gz":
             with gzip.open(str(pdb_code), "rb") as inf:
                 ampal_structure = ampal.load_pdb(inf.read().decode(), path=False)
         else:
@@ -496,8 +497,12 @@ def _draw_output_section(
     f_2 = np.core.defchararray.add(f_1, selected_dataset_map[:, 1])
     f_3 = np.core.defchararray.add(f_2, ")")
     datamap_to_idx = dict(zip(f_3, range(len(f_3))))
+    chain_id = selected_dataset_map[:, 1]
     option = st.selectbox(
-        "Explore probabilities at specific positions:", (f_3), key=f"option"
+        "Explore probabilities at specific positions:",
+        options=f_3,
+        key=f"option_{chain_id}"
+        # Append chain_id to the key
     )
     if "reload" in st.session_state.keys():
         pdb_session2 = show_pdb(selected_pdb[:4], st.session_state.option)
@@ -514,7 +519,7 @@ def _draw_output_section(
     st.altair_chart(chart_residue_comp, use_container_width=False)
 
     # Show sequence logo:
-    output_fig_path= path_to_data / f"{model_name}{selected_pdb}.png"
+    output_fig_path = path_to_data / f"{model_name}{selected_pdb}.png"
     if Path(output_fig_path).exists():
         fig = imread(output_fig_path)
         placeholder_seq_logo.image(fig)
@@ -652,7 +657,7 @@ def _draw_optimisation_section(
             sum_all_errors = opt_seq_metrics[curr_col + "_mae_norm"].to_numpy()
     opt_seq_metrics["summed_mae"] = sum_all_errors
     opt_seq_metrics.sort_values("summed_mae", inplace=True)
-    opt_seq_metrics = opt_seq_metrics[opt_seq_metrics['pdb'] == selected_pdb]
+    opt_seq_metrics = opt_seq_metrics[opt_seq_metrics["pdb"] == selected_pdb]
     st.title(f"Top 3 Optimized Sequence {selected_pdb}")
     for seq in range(0, 3):
         curr_slice = opt_seq_metrics.iloc[[seq]].values.tolist()[0]
@@ -719,14 +724,16 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
     st.sidebar.write("or")
     # TODO: Disable input pdb code if upload occurs
     uploaded_pdb = st.sidebar.file_uploader(
-        label="Upload your backbone/PDB of interest", type=['pdb', 'pdb1'], help="Upload your .pdb or pdb1 file. Files are immediately deleted after the prediction.",
+        label="Upload your backbone/PDB of interest",
+        type=["pdb", "pdb1"],
+        help="Upload your .pdb or pdb1 file. Files are immediately deleted after the prediction.",
     )
     model = st.sidebar.selectbox(
         label="Choose your Model",
         options=(
             "TIMED",
-            #"TIMED_polar",
-            #"TIMED_charge",
+            # "TIMED_polar",
+            # "TIMED_charge",
             # "TIMED_deep",
             # "TIMED_rotamer",
             # "TIMED_rotamer_balanced",
@@ -752,9 +759,17 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
             "Optimize sequences using Monte Carlo", key="mc"
         )
         sample_n_button = st.empty()
-        sample_n = sample_n_button.slider("Number of sequences to generate", 3, 300, 200)
+        sample_n = sample_n_button.slider(
+            "Number of sequences to generate", 3, 300, 200
+        )
         temperature_button = st.empty()
-        temperature = temperature_button.slider("Temperature Factor", 0.0, 1.0, 0.2, help=" A temperature factor can be applied to affect the distributions. A higher temperature factor will lead to more diverse sequences.")
+        temperature = temperature_button.slider(
+            "Temperature Factor",
+            0.0,
+            1.0,
+            0.2,
+            help=" A temperature factor can be applied to affect the distributions. A higher temperature factor will lead to more diverse sequences.",
+        )
     placeholder_run_button = st.sidebar.empty()
     result = placeholder_run_button.button("Run model", key="1")
     st.sidebar.markdown(
@@ -768,7 +783,7 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
             structure_path = None
         else:
             structure_path = (
-                    path_to_pdb / pdb[1:3] / (pdb + ".pdb1.gz")
+                path_to_pdb / pdb[1:3] / (pdb + ".pdb1.gz")
             )  # This is the problem. We need to override this
     # Else user has uploaded a structure
     else:
@@ -948,6 +963,7 @@ def main(args):
             with st.spinner("Deleting uploaded files and data..."):
                 rm_tree(structure_path.parent)
         # For each key in the dataset:
+        print(pdb_to_probability.keys())
         for k in pdb_to_probability.keys():
             slice_seq, slice_real, real_metrics = _draw_output_section(
                 k,
@@ -958,7 +974,7 @@ def main(args):
                 pdb_to_sequence,
                 pdb_to_real_sequence,
                 path_to_data,
-                model, # TODO just added - must check
+                model,
             )
             _draw_performance_section(k, slice_seq, slice_real, res, axis_labels)
             if "mc_3" in st.session_state.keys():
@@ -972,7 +988,7 @@ def main(args):
                         temperature,
                         real_metrics,
                         pdb_to_real_sequence,
-                        model_suffix
+                        model_suffix,
                     )
         with st.sidebar.expander("Advanced Settings"):
             use_montecarlo_button.checkbox(
