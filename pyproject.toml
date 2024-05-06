@@ -24,5 +24,5 @@ dependencies = [
     "stmol==0.0.9",
     "streamlit==1.30.0",
     "tensorflow==2.13.0",
-    "tqdm==4.64.0"
+    "tqdm==4.66.3"
 ]
