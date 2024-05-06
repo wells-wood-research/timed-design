@@ -733,8 +733,8 @@ def _draw_sidebar(all_pdbs: t.List[str], path_to_pdb: Path):
         label="Choose your Model",
         options=(
             "TIMED",
-            # "TIMED_polar",
-            # "TIMED_charge",
+            "TIMED_polar",
+            "TIMED_charge",
             # "TIMED_deep",
             # "TIMED_rotamer",
             # "TIMED_rotamer_balanced",

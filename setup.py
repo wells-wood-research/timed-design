@@ -22,7 +22,7 @@ setup(
     install_requires=[
         "altair==4.2.0",
         "ampal==1.5.1",
-        "aposteriori==2.3.0",
+        "aposteriori==2.4.0",
         "logomaker==0.8",
         "matplotlib==3.5.1",
         "millify==0.1.1",
