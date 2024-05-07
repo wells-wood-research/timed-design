@@ -192,8 +192,6 @@ def customize_predicted_residues(
         Dataset containing all the voxelised/gaussian representations.
     """
 
-    res_to_predict_organised = constrain_aa_resnum(res_to_predict)[0]
-
     if len(chains_to_predict) < len(res_to_predict_organised):
         raise ValueError(
             f"User wants to predict sequences for additional chains, but some of these chains must be missing in --chains_to_predict. Make sure that you separate different chains by using equal number of commas for both --res_to_predict and --chains_to_predict"
@@ -202,7 +200,8 @@ def customize_predicted_residues(
         raise ValueError(
             f"User wants to predict sequences for additional chains, but some of these sequences must be missing in --res_to_predict. Make sure that you separate different chains by using equal number of commas for both --res_to_predict and --chains_to_predict"
         )
-
+    
+    res_to_predict_organised = constrain_aa_resnum(res_to_predict)[0]
     chain_res_fix_mapping = {
         chain: res_to_predict_organised[(i)]
         for i, chain in enumerate(chains_to_predict)
