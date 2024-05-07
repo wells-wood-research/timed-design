@@ -140,7 +140,6 @@ def customize_fixed_residues(
                     idx: str_value
                     for idx, str_value in zip(normalised_indexes_to_fix, str_values)
                 }
-                print(aa_mapping)
                 for res_tuple in normalised_indexes_to_fix:
                     res_num_to_revert_to_wt = res_tuple
                     # Specified residues should change in the prediction.
@@ -210,7 +209,6 @@ def customize_predicted_residues(
     }
 
     res_dict = res_index_collection(flat_dataset_map)
-    print(chain_res_fix_mapping)
     for chain, res_tuples in chain_res_fix_mapping.items():
         for key, value in pdb_to_sequence.items():
             if key.endswith(chain) and key in pdb_to_real_sequence:
@@ -279,7 +277,6 @@ def customize_fixed_residues(
 
     """
     mapping = {chain: res_to_fix[i] for i, chain in enumerate(chains_to_customize)}
-    print(mapping)
     for chain, res_tuples in mapping.items():
         for key, value in pdb_to_sequence.items():
             if key.endswith(chain) and key in pdb_to_real_sequence:
