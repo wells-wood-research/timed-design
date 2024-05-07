@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "TIMED-Design"
-version = "1.0.1"
+version = "1.1.0"
 requires-python = ">= 3.8"
 description = "TIMED-Design is a library to use protein sequence design models and analyse predictions."
 readme = "README.md"

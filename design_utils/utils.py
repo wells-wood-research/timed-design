@@ -21,7 +21,6 @@ from numpy import genfromtxt
 from aposteriori.config import MAKE_FRAME_DATASET_VER, UNCOMMON_RESIDUE_DICT
 from aposteriori.data_prep.create_frame_data_set import (
     DatasetMetadata,
-    residue_number_indexing,
 )
 
 
@@ -256,6 +255,90 @@ def customize_predicted_residues(
                 and key in pdb_to_real_sequence
             ):
                 pdb_to_sequence[key] = pdb_to_real_sequence[key]
+
+
+def customize_fixed_residues(
+    pdb_to_sequence, pdb_to_real_sequence, chains_to_customize, res_to_fix
+):
+    """
+
+    A function to customize TIMED predictions. When user gives --res_to_fix and --chains_to_customize
+    commands, the residues in a given chain will be fixed to the input structure residues, and rest of the protein
+    will be predicted normally.
+
+     Parameters
+    ----------
+    pdb_to_sequence: dict
+        Sequence as predicted by TIMED
+    pdb_to_real_sequence: dict
+        WT sequence
+    chains_to_customize: tuple
+        User specified chains where fixing of residues will be applied.
+    res_to_fix: tuple
+         Residue numbers for the fixed residues. This assumes that when the chain changes the residue number also starts from 1
+
+    """
+    mapping = {chain: res_to_fix[i] for i, chain in enumerate(chains_to_customize)}
+    print(mapping)
+    for chain, res_tuples in mapping.items():
+        for key, value in pdb_to_sequence.items():
+            if key.endswith(chain) and key in pdb_to_real_sequence:
+                real_sequence = pdb_to_real_sequence[key]
+                sequence = list(value)
+                for res_tuple in res_tuples:
+                    num = res_tuple
+                    # Specified residues should change in the prediction.
+                    if 0 <= num - 1 < min(len(sequence), len(real_sequence)):
+                        pdb_to_sequence[key] = (
+                            pdb_to_sequence[key][: num - 1]
+                            + pdb_to_real_sequence[key][num - 1]
+                            + pdb_to_sequence[key][num:]
+                        )
+
+
+def customize_predicted_residues(
+    pdb_to_sequence, pdb_to_real_sequence, chains_to_customize, res_to_predict
+):
+
+    """
+    A function to customize TIMED predictions. When user gives --res_to_predict and --chains_to_customize
+    commands, the residues in a given chain will be predicted and rest of the protein will be converted back to WT.
+
+     Parameters
+    ----------
+    pdb_to_sequence: dict
+        Sequence as predicted by TIMED
+    pdb_to_real_sequence: dict
+        WT sequence
+    chains_to_customize: tuple
+        User specified chains where predictions will be applied. Unspecified chains will be converted back to WT.
+    res_to_predict: tuple
+         Residue numbers for the predicting residues. This assumes that when the chain changes the residue number also starts from 1
+
+    """
+
+    mapping = {chain: res_to_predict[i] for i, chain in enumerate(chains_to_customize)}
+    for chain, res_tuples in mapping.items():
+        for key, value in pdb_to_sequence.items():
+            if key.endswith(chain) and key in pdb_to_real_sequence:
+                sequence = list(value)
+                for num in range(1, len(sequence)):
+                    # Specified residues should be kept as they are in pdb_to_sequence but rest should change.
+                    if num not in res_tuples:
+                        pdb_to_sequence[key] = (
+                            pdb_to_sequence[key][: num - 1]
+                            + pdb_to_real_sequence[key][num - 1]
+                            + pdb_to_sequence[key][num:]
+                        )
+            # If the chain is not specified to be predicted by TIMED, convert it back to WT.
+            elif not key.endswith(chain) and key in pdb_to_real_sequence:
+                sequence = list(value)
+                for num in range(1, len(sequence)):
+                    pdb_to_sequence[key] = (
+                        pdb_to_sequence[key][: num - 1]
+                        + pdb_to_real_sequence[key][num - 1]
+                        + pdb_to_sequence[key][num:]
+                    )
 
 
 def rm_tree(pth: Path):
