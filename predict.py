@@ -1,6 +1,8 @@
 import argparse
+from ast import Str, Tuple
 from math import ceil
 from pathlib import Path
+from re import T
 
 import numpy as np
 import tensorflow as tf
@@ -21,6 +23,22 @@ from design_utils.utils import (
 )
 
 
+def parse_residue_list(residue_list):
+    try:
+        lists = residue_list.split(",")
+        return [tuple(str(residue) for residue in sublist.split()) for sublist in lists]
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid residue list: {residue_list}")
+
+
+def parse_chain_list(chain_list):
+    try:
+        chains = chain_list.split(",")
+        return [(chain.strip()) for chain in chains]
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid chain list: {chain_list}")
+
+
 def top_3_cat_acc(y_true, y_pred):
     return top_k_categorical_accuracy(y_true, y_pred, k=3)
 
@@ -28,6 +46,10 @@ def top_3_cat_acc(y_true, y_pred):
 def load_dataset_and_predict(
     models: list,
     dataset_path: Path,
+    res_to_predict: Tuple,
+    res_to_fix: Tuple,
+    chains_to_fix: Tuple,
+    chains_to_predict: Tuple,
     batch_size: int = 20,
     start_batch: int = 0,
     dataset_map_path: Path = "datasetmap.txt",
@@ -49,6 +71,16 @@ def load_dataset_and_predict(
         List of paths to the models to be used for the ensemble
     dataset_path: Path
         Path to the dataset with frames.
+    res_to_predict: Tuple
+        Residues that will be predicted by TIMED in a specified chain. Unspecified chains and rest of the residues
+        in a specified chain will be kept same as WT.
+    res_to_fix:
+        Residues that will be kept the same as WT in a specified chain. Unspecified chains and rest of the residues
+        in a specified chain will be predicted normally by TIMED.
+    chains_to_fix:
+        To be used in combination with --res_to_fix. Chains that will be used for residue fixing. Unchosen residues and unchosen chains will be predicted normally by TIMED
+    chains_to_predict:
+        To be used in combination with --res_to_predict. All the residues in the unchosen chains will be reverted to WT (unless --res_to_fix and --chains_to_fix are not used for such chains and residues).
     batch_size: int
         Number of frames to be looked predicted at once.
     start_batch:
@@ -67,7 +99,7 @@ def load_dataset_and_predict(
         Whether the structure is NMR and the prediction should be a consensus of all the states
     path_to_output: Path
         Path to output directory. Defaults to current working directory.
-        
+
     Returns
     -------
     flat_dataset_map: t.List[t.Tuple]
@@ -120,7 +152,11 @@ def load_dataset_and_predict(
         # Import Model:
         frame_model = tf.keras.models.load_model(Path(m))
         # Create output file for model:
-        model_out = path_to_output / ("{model_name}" + "_rot.csv" if predict_rotamers else f"{model_name}" + ".csv")
+        model_out = path_to_output / (
+            "{model_name}" + "_rot.csv"
+            if predict_rotamers
+            else f"{model_name}" + ".csv"
+        )
         # Load batch:
         for index in tqdm(
             range(start_batch, n_batches),
@@ -134,10 +170,7 @@ def load_dataset_and_predict(
             current_batch_map = flat_dataset_map[
                 index * batch_size : (index + 1) * batch_size
             ]
-            X_batch, y_true_batch = load_batch(
-                dataset_path,
-                current_batch_map,
-            )
+            X_batch, y_true_batch = load_batch(dataset_path, current_batch_map)
             # Make Predictions
             y_pred_batch = frame_model.predict(X_batch)
             if predict_rotamers:
@@ -152,7 +185,9 @@ def load_dataset_and_predict(
             # Save current labels:
             y_true.extend(y_true_batch)
             # Save to output file:
-            save_outputs_to_file(y_true, y_pred, flat_dataset_map, i, model_name, path_to_output)
+            save_outputs_to_file(
+                y_true, y_pred, flat_dataset_map, i, model_name, path_to_output
+            )
             # Reset to avoid memory errors
             del y_true
             del y_pred
@@ -170,6 +205,10 @@ def load_dataset_and_predict(
             pdb_to_consensus_prob,
         ) = extract_sequence_from_pred_matrix(
             flat_dataset_map,
+            res_to_predict,
+            res_to_fix,
+            chains_to_fix,
+            chains_to_predict,
             prediction_matrix,
             rotamers_categories=flat_categories if predict_rotamers else None,
             old_datasetmap=old_datasetmap,
@@ -178,10 +217,7 @@ def load_dataset_and_predict(
         save_dict_to_fasta(pdb_to_sequence, model_name, path_to_output)
         save_dict_to_fasta(pdb_to_real_sequence, "dataset", path_to_output)
         if pdb_to_consensus:
-            save_dict_to_fasta(
-                pdb_to_consensus,
-                model_name + "_consensus",
-            )
+            save_dict_to_fasta(pdb_to_consensus, model_name + "_consensus")
             save_consensus_probs(pdb_to_consensus_prob, model_name, path_to_output)
 
     return (
@@ -237,6 +273,10 @@ def main(args):
     ) = load_dataset_and_predict(
         [args.path_to_model],
         args.path_to_dataset,
+        res_to_predict=args.res_to_predict,
+        res_to_fix=args.res_to_fix,
+        chains_to_fix=args.chains_to_fix,
+        chains_to_predict=args.chains_to_predict,
         batch_size=args.batch_size,
         start_batch=0,
         blacklist=args.path_to_blacklist,
@@ -294,5 +334,30 @@ if __name__ == "__main__":
         action="store_true",
         help="Whether the structure is NMR. NMR will have different states so TIMED will try to build a consensus",
     )
+
+    parser.add_argument(
+        "--res_to_fix",
+        type=parse_residue_list,
+        help="Specify the residue numbers that need to be fixed, separated by commas. Example: '2 3 4 5, 6 7 8' will keep 2 3 4 5 6 7 8th residues as identical with WT and predict the rest.",
+    )
+
+    parser.add_argument(
+        "--chains_to_fix",
+        type=parse_chain_list,
+        help="Specify the chains need to be fixed, separated by commas. Example: 'A, B' ",
+    )
+
+    parser.add_argument(
+        "--chains_to_predict",
+        type=parse_chain_list,
+        help="Specify the chains need to be predicted, separated by commas. Example: 'A, B' ",
+    )
+
+    parser.add_argument(
+        "--res_to_predict",
+        type=parse_residue_list,
+        help="Specify the residue numbers that need to be predicted, separated by commas. Example: '2 3 4 5, 6 7 8' will predict 2 3 4 5 6 7 8th residues and leave the rest as same as WT",
+    )
+
     params = parser.parse_args()
     main(params)

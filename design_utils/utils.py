@@ -1,8 +1,11 @@
+from asyncio import run_coroutine_threadsafe
+from logging import raiseExceptions
 import gzip, sys, random, string
 import typing as t
 import warnings
 from itertools import product
 from pathlib import Path
+import re
 
 import ampal
 import h5py
@@ -16,7 +19,243 @@ from ampal.amino_acids import (
 from numpy import genfromtxt
 
 from aposteriori.config import MAKE_FRAME_DATASET_VER, UNCOMMON_RESIDUE_DICT
-from aposteriori.data_prep.create_frame_data_set import DatasetMetadata
+from aposteriori.data_prep.create_frame_data_set import (
+    DatasetMetadata,
+    residue_number_indexing,
+)
+
+
+def constrain_aa_resnum(res_to_fix):
+    """
+    At the moment the user inputs for residue fixing and residue prediction are taken as a string.
+    This function takes a user input and separates the integer bits from string bits. Particularly useful if the user wants to specify the aminoacid constraints when fixing residues.
+    For example, if the user puts --res_to_fix "10Y", this function will come in handy to constrain the 10th residue to a tyrosine.
+    If the user enters --res_to_fix "5", then the aminoacid will be considered "X" at the beginning, but this will not be inserted into the predictions function to create dictionaries for individual chains of proteins with their residue numbers.
+
+     Parameters
+    ----------
+    res_to_fix: tuple
+        Residue numbers for the fixed residues. This assumes that when the chain changes the residue number also starts from 1
+    """
+
+    aa_inserted = []
+    resnum_to_insert = []
+    for item in res_to_fix:
+        constrained_resnum = []
+        constrained_aa = []
+        for i in item:
+            match = re.search(r"\d+", i)
+            if match:
+                constrained_resnum.append(int(match.group()))
+                if len(match.group()) < len(i):
+                    constrained_aa.append(i[len(match.group()) :])
+                else:
+                    constrained_aa.append("X")
+            else:
+                constrained_resnum.append("X")
+                constrained_aa.append(i)
+        aa_inserted.append(tuple(constrained_resnum))
+        resnum_to_insert.append(tuple(constrained_aa))
+
+    return aa_inserted, resnum_to_insert
+
+
+def res_index_collection(flat_dataset_map):
+    """
+    A function to create dictionaries for individual chains of proteins with their residue numbers.
+
+     Parameters
+    ----------
+    flat_dataset_map: list
+        Dataset containing all the voxelised/gaussian representations.
+    """
+    res_indexes = {}
+    for data in flat_dataset_map:
+        prot_chain = data[0] + data[1]
+        res_number = int(data[2])
+        if prot_chain not in res_indexes:
+            res_indexes[prot_chain] = []
+        res_indexes[prot_chain].append(res_number)
+    return res_indexes
+
+
+def customize_fixed_residues(
+    pdb_to_sequence, pdb_to_real_sequence, chains_to_fix, res_to_fix, flat_dataset_map
+):
+    """
+    A function to customize TIMED predictions. When user gives --res_to_fix and --chains_to_customize
+    commands, the residues in a given chain will be fixed to the input structure residues, and rest of the protein
+    will be predicted normally.
+    Parameters
+    ----------
+    pdb_to_sequence: dict
+        Sequence as predicted by TIMED
+    pdb_to_real_sequence: dict
+        WT sequence
+    chains_to_customize: tuple
+        User specified chains where fixing of residues will be applied.
+    res_to_fix: tuple
+        Residue numbers for the fixed residues. This assumes that when the chain changes the residue number also starts from 1
+    flat_dataset_map: list
+        Dataset containing all the voxelised/gaussian representations.
+    """
+
+    if len(chains_to_fix) < len(res_to_fix):
+        raise ValueError(
+            f"User wants to predict sequences for additional chains, but some of these chains must be missing in --chains_to_fix. Make sure that you separate different chains by using equal number of commas for both --res_to_fix and --chains_to_fix"
+        )
+    elif len(chains_to_fix) > len(res_to_fix):
+        raise ValueError(
+            f"User wants to predict sequences for additional chains, but some of these sequences must be missing in --res_to_fix. Make sure that you separate different chains by using equal number of commas for both --res_to_fix and --chains_to_fix"
+        )
+
+    res_to_fix_organised, aa_inserted_organised = constrain_aa_resnum(res_to_fix)
+    chain_res_fix_mapping = {
+        chain: (res_to_fix_organised[i], aa_inserted_organised[i])
+        for i, chain in enumerate(chains_to_fix)
+    }
+    res_dict = res_index_collection(flat_dataset_map)
+    for chain, (res_tuples, str_values) in chain_res_fix_mapping.items():
+        res_tuples = [int(item) for item in res_tuples]
+        for key, value in pdb_to_sequence.items():
+            if key.endswith(chain) and key in pdb_to_real_sequence:
+                real_sequence = pdb_to_real_sequence[key]
+                sequence = list(value)
+                res_values = res_dict[key]
+                for res_num in res_tuples:
+                    if res_num > max(res_values):
+                        raise ValueError(
+                            f"Residue number {res_num} exceeds the highest residue number {max(res_values)} for the {key} chain"
+                        )
+                    elif res_num < min(res_values):
+                        raise ValueError(
+                            f"Residue number {res_num} is lower than the lowest residue number {min(res_values)} for the {key} chain"
+                        )
+                # Find the indexes that match the values in res_tuples
+                normalised_indexes_to_fix = [
+                    res_values.index(res_tuple)
+                    for res_tuple in res_tuples
+                    if res_tuple in res_values
+                ]
+                aa_mapping = {
+                    idx: str_value
+                    for idx, str_value in zip(normalised_indexes_to_fix, str_values)
+                }
+                print(aa_mapping)
+                for res_tuple in normalised_indexes_to_fix:
+                    res_num_to_revert_to_wt = res_tuple
+                    # Specified residues should change in the prediction.
+                    if aa_mapping[res_num_to_revert_to_wt] == "X":
+                        if (
+                            0
+                            <= res_num_to_revert_to_wt
+                            < min(len(sequence), len(real_sequence))
+                        ):
+                            pdb_to_sequence[key] = (
+                                pdb_to_sequence[key][:res_num_to_revert_to_wt]
+                                + pdb_to_real_sequence[key][res_num_to_revert_to_wt]
+                                + pdb_to_sequence[key][res_num_to_revert_to_wt + 1 :]
+                            )
+                    else:
+                        if (
+                            0
+                            <= res_num_to_revert_to_wt
+                            < min(len(sequence), len(real_sequence))
+                        ):
+                            pdb_to_sequence[key] = (
+                                pdb_to_sequence[key][:res_num_to_revert_to_wt]
+                                + aa_mapping[res_num_to_revert_to_wt]
+                                + pdb_to_sequence[key][res_num_to_revert_to_wt + 1 :]
+                            )
+
+
+def customize_predicted_residues(
+    pdb_to_sequence,
+    pdb_to_real_sequence,
+    chains_to_predict,
+    res_to_predict,
+    flat_dataset_map,
+):
+
+    """
+    A function to customize TIMED predictions. When user gives --res_to_predict and --chains_to_customize
+    commands, the residues in a given chain will be predicted and rest of the protein will be converted back to WT.
+     Parameters
+    ----------
+    pdb_to_sequence: dict
+        Sequence as predicted by TIMED
+    pdb_to_real_sequence: dict
+        WT sequence
+    chains_to_customize: tuple
+        User specified chains where predictions will be applied. Unspecified chains will be converted back to WT.
+    res_to_predict: tuple
+        Residue numbers for the predicting residues. This assumes that when the chain changes the residue number also starts from 1
+    flat_dataset_map: list
+        Dataset containing all the voxelised/gaussian representations.
+    """
+
+    res_to_predict_organised = constrain_aa_resnum(res_to_predict)[0]
+
+    if len(chains_to_predict) < len(res_to_predict_organised):
+        raise ValueError(
+            f"User wants to predict sequences for additional chains, but some of these chains must be missing in --chains_to_predict. Make sure that you separate different chains by using equal number of commas for both --res_to_predict and --chains_to_predict"
+        )
+    elif len(chains_to_predict) > len(res_to_predict_organised):
+        raise ValueError(
+            f"User wants to predict sequences for additional chains, but some of these sequences must be missing in --res_to_predict. Make sure that you separate different chains by using equal number of commas for both --res_to_predict and --chains_to_predict"
+        )
+
+    chain_res_fix_mapping = {
+        chain: res_to_predict_organised[(i)]
+        for i, chain in enumerate(chains_to_predict)
+    }
+
+    res_dict = res_index_collection(flat_dataset_map)
+    print(chain_res_fix_mapping)
+    for chain, res_tuples in chain_res_fix_mapping.items():
+        for key, value in pdb_to_sequence.items():
+            if key.endswith(chain) and key in pdb_to_real_sequence:
+                real_sequence = pdb_to_real_sequence[key]
+                sequence = list(value)
+                res_values = res_dict[key]
+                for res_num in res_tuples:
+                    if res_num > max(res_values):
+                        raise ValueError(
+                            f"Residue number {res_num} exceeds the highest residue number {max(res_values)}"
+                        )
+                    elif res_num < min(res_values):
+                        raise ValueError(
+                            f"Residue number {res_num} is lower than the lowest residue number {min(res_values)} for the {key} chain"
+                        )
+                # Find the indexes that match the values in res_tuples
+                matching_indexes = [
+                    res_values.index(res_tuple)
+                    for res_tuple in res_tuples
+                    if res_tuple in res_values
+                ]
+                all_indexes = [idx for idx in range(len(res_values))]
+                # Update res_tuples with these indexes
+                normalised_indexes_to_fix = matching_indexes
+                for idx in all_indexes:
+                    if idx not in normalised_indexes_to_fix:
+                        res_num_to_revert_to_wt = idx
+                        # Specified residues should change in the prediction.
+                        if (
+                            0
+                            <= res_num_to_revert_to_wt
+                            < min(len(sequence), len(real_sequence))
+                        ):
+                            pdb_to_sequence[key] = (
+                                pdb_to_sequence[key][:res_num_to_revert_to_wt]
+                                + pdb_to_real_sequence[key][res_num_to_revert_to_wt]
+                                + pdb_to_sequence[key][res_num_to_revert_to_wt + 1 :]
+                            )
+            # If the chain is not specified to be predicted by TIMED, convert it back to WT.
+            elif (
+                key[-1] not in chain_res_fix_mapping.keys()
+                and key in pdb_to_real_sequence
+            ):
+                pdb_to_sequence[key] = pdb_to_real_sequence[key]
 
 
 def rm_tree(pth: Path):
@@ -207,17 +446,10 @@ def load_datasetmap(path_to_datasetmap: Path, is_old: bool = False) -> np.ndarra
         path_to_datasetmap.suffix == ".txt"
     ), f"Expected Path {path_to_datasetmap} to be a .txt file but got {path_to_datasetmap.suffix}."
     if is_old:
-        dataset_map = np.genfromtxt(
-            path_to_datasetmap,
-            delimiter=",",
-            dtype=str,
-        )
+        dataset_map = np.genfromtxt(path_to_datasetmap, delimiter=",", dtype=str)
     else:
         dataset_map = np.genfromtxt(
-            path_to_datasetmap,
-            delimiter=" ",
-            dtype=str,
-            skip_header=3,
+            path_to_datasetmap, delimiter=" ", dtype=str, skip_header=3
         )
     dataset_map = np.asarray(dataset_map)
     # If list only contains 1 pdb, it fails to create a list of list [pdb_code, count]
@@ -485,8 +717,7 @@ def compress_rotamer_predictions_to_20(prediction_matrix: np.ndarray) -> np.ndar
 
 
 def load_batch(
-    dataset_path: Path,
-    data_point_batch: t.List[t.Tuple],
+    dataset_path: Path, data_point_batch: t.List[t.Tuple]
 ) -> (np.ndarray, np.ndarray):
     """
     Load batch from a dataset map.
@@ -531,9 +762,7 @@ def load_batch(
 
 
 def convert_dataset_map_for_srb(
-    flat_dataset_map: list,
-    model_name: str,
-    path_to_output: Path = Path.cwd(),
+    flat_dataset_map: list, model_name: str, path_to_output: Path = Path.cwd()
 ):
     """
     Converts datasetmap for compatibility with PDBench / Sequence recovery benchmark
@@ -593,7 +822,7 @@ def save_consensus_probs(
 
 
 def save_dict_to_fasta(
-    pdb_to_sequence: dict, model_name: str, path_to_output: Path = Path.cwd(),
+    pdb_to_sequence: dict, model_name: str, path_to_output: Path = Path.cwd()
 ):
     """
     Saves a dictionary of protein sequences to a fasta file.
@@ -615,6 +844,10 @@ def save_dict_to_fasta(
 
 def extract_sequence_from_pred_matrix(
     flat_dataset_map: t.List[t.Tuple],
+    res_to_predict: t.Tuple[t.Tuple],
+    res_to_fix: t.Tuple[t.Tuple],
+    chains_to_fix: t.Tuple[t.Tuple],
+    chains_to_predict: t.Tuple[t.Tuple],
     prediction_matrix: np.ndarray,
     rotamers_categories: t.List[str],
     old_datasetmap: bool = False,
@@ -690,18 +923,96 @@ def extract_sequence_from_pred_matrix(
                 pdb_to_real_sequence[pdb_chain] += res_to_r_dic[res]
         if not old_datasetmap:
             previous_count += count
+    if chains_to_fix and not chains_to_predict:
+        if res_to_fix == []:
+            warnings.warn(
+                "No prompt was given about which residues to fix. TIMED will make predictions for all the residues on the protein."
+            )
+        else:
+            customize_fixed_residues(
+                pdb_to_sequence,
+                pdb_to_real_sequence,
+                chains_to_fix,
+                res_to_fix,
+                flat_dataset_map,
+            )
+    elif chains_to_predict and not chains_to_fix:
+        if res_to_predict == []:
+            warnings.warn(
+                "No prompt was given about which residues to predict. Also, no residue fixing and chain fixing are prompted. Therefore, we will retrieve the consensus sequence."
+            )
+        else:
+            customize_predicted_residues(
+                pdb_to_sequence,
+                pdb_to_real_sequence,
+                chains_to_predict,
+                res_to_predict,
+                flat_dataset_map,
+            )
+            print(
+                "No residue fixing and chain fixing are prompted. Therefore, we will retrieve the consensus sequence for rest of the protein."
+            )
+    elif chains_to_predict and chains_to_fix:
+        if res_to_predict and res_to_fix:
+            customize_predicted_residues(
+                pdb_to_sequence,
+                pdb_to_real_sequence,
+                chains_to_predict,
+                res_to_predict,
+                flat_dataset_map,
+            )
+            customize_fixed_residues(
+                pdb_to_sequence,
+                pdb_to_real_sequence,
+                chains_to_fix,
+                res_to_fix,
+                flat_dataset_map,
+            )
+        elif res_to_predict and not res_to_fix:
+            warnings.warn(
+                "No prompt was given about which residues to fix or predict. TIMED will predict all the residues on the protein."
+            )
+            customize_predicted_residues(
+                pdb_to_sequence,
+                pdb_to_real_sequence,
+                chains_to_predict,
+                res_to_predict,
+                flat_dataset_map,
+            )
+        elif res_to_fix and not res_to_predict:
+            warnings.warn(
+                "No prompt was given about which residues to predict. TIMED will keep all the unconstrained residues the same as consensus sequence."
+            )
+            customize_fixed_residues(
+                pdb_to_sequence,
+                pdb_to_real_sequence,
+                chains_to_fix,
+                res_to_fix,
+                flat_dataset_map,
+            )
+        else:
+            warnings.warn(
+                "No prompt was given about which residues to predict or fix. TIMED will predict all the residues on the protein."
+            )
 
+    else:
+        warnings.warn(
+            "No prompt was given to fix or predict residues. TIMED will make predictions for all the residues on the protein."
+        )
     if is_consensus:
         last_pdb = ""
         # Sum up probabilities:
         for pdb_chain in pdb_to_sequence.keys():
             curr_pdb = pdb_chain.split("_")[0]
             if last_pdb != curr_pdb:
-                pdb_to_consensus_prob[curr_pdb] = np.array(pdb_to_probability[pdb_chain])
+                pdb_to_consensus_prob[curr_pdb] = np.array(
+                    pdb_to_probability[pdb_chain]
+                )
                 last_pdb = curr_pdb
             else:
                 pdb_to_consensus_prob[curr_pdb] = (
-                    pdb_to_consensus_prob[curr_pdb] + np.array(pdb_to_probability[pdb_chain])
+                    pdb_to_consensus_prob[curr_pdb]
+                    + np.array(pdb_to_probability[pdb_chain])
                 ) / 2
         # Extract sequences from consensus probabilities:
         for pdb_chain in pdb_to_consensus_prob.keys():
