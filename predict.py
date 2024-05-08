@@ -74,16 +74,16 @@ def load_dataset_and_predict(
     res_to_predict: Tuple
         Residues that will be predicted by TIMED in a specified chain. Unspecified chains and rest of the residues
         in a specified chain will be kept same as WT.
-    res_to_fix:
+    res_to_fix: Tuple
         Residues that will be kept the same as WT in a specified chain. Unspecified chains and rest of the residues
         in a specified chain will be predicted normally by TIMED.
-    chains_to_fix:
+    chains_to_fix: Tuple
         To be used in combination with --res_to_fix. Chains that will be used for residue fixing. Unchosen residues and unchosen chains will be predicted normally by TIMED
-    chains_to_predict:
+    chains_to_predict: Tuple
         To be used in combination with --res_to_predict. All the residues in the unchosen chains will be reverted to WT (unless --res_to_fix and --chains_to_fix are not used for such chains and residues).
     batch_size: int
         Number of frames to be looked predicted at once.
-    start_batch:
+    start_batch: int
         Which batch to start from. In case the code crashes you can check which
         was the last batch used and restart from there. Make sure you remove the
         other models from the paths to be used.
