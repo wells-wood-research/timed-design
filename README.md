@@ -254,7 +254,7 @@ Or if we want to fix the residue number 3, 4, and 5:
 If we want to fix residues from multiple chains, such as 3, 4 and 5 from chain A and 2, 3, 4 from chain B:
 
 ```
- python3 predict.py --path_to_dataset {YOUR_DATASET}.hdf5 --path_to_model {YOUR_TIMED_MODEL}.h5 --path_to_output . --res_to_fix "3 4 5, 2 3 4" --chains_to_predict "A, B"
+ python3 predict.py --path_to_dataset {YOUR_DATASET}.hdf5 --path_to_model {YOUR_TIMED_MODEL}.h5 --path_to_output . --res_to_fix "3 4 5, 2 3 4" --chains_to_fix "A, B"
 
 ```
 
@@ -275,7 +275,7 @@ Or if we want to predict the residue number 3, 4, and 5:
 If we want to predict residues from multiple chains, such as 3, 4 and 5 from chain A and 2, 3, 4 from chain B:
 
 ```
- python3 predict.py --path_to_dataset {YOUR_DATASET}.hdf5 --path_to_model {YOUR_TIMED_MODEL}.h5 --path_to_output . --res_to_fix "3 4 5, 2 3 4" --chains_to_fix "A, B"
+ python3 predict.py --path_to_dataset {YOUR_DATASET}.hdf5 --path_to_model {YOUR_TIMED_MODEL}.h5 --path_to_output . --res_to_predict "3 4 5, 2 3 4" --chains_to_predict "A, B"
 
 ```
 
