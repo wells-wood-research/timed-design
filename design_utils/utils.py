@@ -30,9 +30,9 @@ def avoid_fix_predict_simultaneously(
 
     Parameters:
     -----------
-    res_to_predict : tuple
+    res_to_predict : t.Tuple[t.Tuple]
         Tuple of tuples representing residues to be predicted.
-    res_to_fix : tuple
+    res_to_fix : t.Tuple[t.Tuple]
         Tuple of tuples representing residues to be fixed.
 
     Raises:
