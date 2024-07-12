@@ -200,7 +200,7 @@ python sample.py --path_to_pred_matrix TIMED.csv --path_to_datasetmap TIMED.txt 
 This will sample 200 sequences using the provided probability distribution and temperature factor of 0.1. Output sampled sequences can be increased or decreased by adjusting the number of output structures ''--sample_n 200''.
 
  #### What is the Sampling Temperature? flag: '--temperature <value>'
- Sampling temperature controls the randomness of predictions made by the model. By adjusting the temperature, you can either steer the model towards generating more predictable sequences (exploitation) or more diverse sequences (exploration). This parameter can range from 0 to any positive number. 
+ Sampling temperature controls the randomness of predictions made by the model. By adjusting the temperature, you can either steer the model towards generating more predictable sequences (exploitation) or more diverse sequences (exploration). This parameter can range from 0 to any positive number. However, we recommend sampling at temperatures between 0.1 and 1 because sequences predicted for temperature > 1 exhibit high variations in their Root-Mean-Square-Deviation (RMSD).
 
  - Temperature = 0: This is equivalent to taking the most probable next token every time, also known as the argmax. At this temperature, the model's output is entirely deterministic and focused on the most likely sequence.
 
