@@ -1,9 +1,9 @@
-ampal==1.5.1
-aposteriori==2.4.0
-matplotlib==3.5.1
+ampal==2.1.0
+aposteriori==2.5.0
+matplotlib
 requests==2.32.0
 scikit_learn==1.3.2
 seaborn==0.11.2
-setuptools>=65.5.1
+setuptools
 tensorflow==2.13.0
 tqdm==4.66.3

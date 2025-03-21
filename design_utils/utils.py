@@ -281,128 +281,52 @@ def extract_metadata_from_dataset(frame_dataset: Path) -> DatasetMetadata:
     return dataset_metadata
 
 
-def get_pdb_keys_to_filter(
-    pdb_key_path: Path, file_extension: str = ".txt"
-) -> t.List[str]:
-    """
-    Obtains list of PDB keys from benchmark file. This is to ensure no leakage
-    of training samples is seen in the benchmark.
-
-    Parameters
-    ----------
-    pdb_key_path: Path
-        Path to files with pdb keys.
-    file_extension: str
-        Extension of file. Defaults to ".txt"
-
-    Returns
-    -------
-    pdb_keys_list: t.List[str]
-        List of pdb keys to be removed from training set.
-    """
-    pdb_key_files = list(pdb_key_path.glob(f"**/*{file_extension}"))
-    assert len(pdb_key_files) >= 1, "Expected at least 1 pdb key file."
-
-    pdb_keys_list = []
-    # For each file:
-    for pdb_list_file in pdb_key_files:
-        curr_keys_list = genfromtxt(pdb_list_file, dtype=str)
-        # filter chain (we want to delete the whole structure, regardless of chain:
-        for pdb in curr_keys_list:
-            # Add to list:
-            pdb_keys_list.append(pdb[:4])
-
-    return pdb_keys_list
-
-
 def create_flat_dataset_map(
     frame_dataset: Path,
-    filter_list: t.List[str] = [],
-    remove_blacklist_silently: bool = False,
 ) -> (t.List[t.Tuple[str, int, str, str]], t.Set[str]):
     """
-    Flattens the structure of the h5 dataset for batching and balancing
-    purposes.
+    Flattens the structure of the h5 dataset for batching and balancing purposes.
 
     Parameters
     ----------
     frame_dataset: Path
-        Path to the .h5 dataset with the following structure.
-        └─[pdb_code] Contains a number of subgroups, one for each chain.
-          └─[chain_id] Contains a number of subgroups, one for each residue.
-            └─[residue_id] voxels_per_side^3 array of ints, representing element number.
-              └─.attrs['label'] Three-letter code for the residue.
-              └─.attrs['encoded_residue'] One-hot encoding of the residue.
-        └─.attrs['make_frame_dataset_ver']: str - Version used to produce the dataset.
-        └─.attrs['frame_dims']: t.Tuple[int, int, int, int] - Dimentsions of the frame.
-        └─.attrs['atom_encoder']: t.List[str] - Lables used for the encoding (eg, ["C", "N", "O"]).
-        └─.attrs['encode_cb']: bool - Whether a Cb atom was added at the avg position of (-0.741287356, -0.53937931, -1.224287356).
-        └─.attrs['atom_filter_fn']: str - Function used to filter the atoms in the frame.
-        └─.attrs['residue_encoder']: t.List[str] - Ordered list of residues corresponding to the encoding used.
-        └─.attrs['frame_edge_length']: float - Length of the frame in Angstroms (A)
-    filter_list: t.List[str]
-        List of banned PDBs. These are automatically removed from the train/validation set.
-    remove_blacklist_silently: bool
-        Whether to remove the pdb codes in the blacklist with a warning (True), or raise ValueError (False and default)
+        Path to the .hdf5 dataset with a hierarchical structure of PDB codes, chains, and residues.
+
     Returns
     -------
-    flat_dataset_map: t.List[t.Tuple]
-        List of tuples with the order
-        [... (pdb_code, chain_id, residue_id,  residue_label, encoded_residue) ...]
-    training_set_pdbs: set
-        Set of all the pdb codes in the training/validation set.
+    flat_dataset_map: List[Tuple[str, str, str, str]]
+        Flattened dataset structure containing (pdb_code, chain_id, residue_id, residue_label).
+    training_set_pdbs: Set[str]
+        Set of all PDB codes included in the training/validation set.
     """
-    standard_residues = list(standard_amino_acids.values())
-    # Training set pdbs:
+    standard_residues = set(standard_amino_acids.values())  # Use a set for O(1) lookups
+    flat_dataset_map = []
     training_set_pdbs = set()
 
     with h5py.File(frame_dataset, "r") as dataset_file:
-        flat_dataset_map = []
-        # Create flattened dataset structure:
-        for pdb_code in dataset_file:
-            # Check first 4 letters of PBD code in blacklist:
-            if pdb_code[:4] not in filter_list:
-                for chain_id in dataset_file[pdb_code].keys():
-                    # Sort by residue int rather than str
-                    residue_n = np.array(
-                        list(dataset_file[pdb_code][chain_id].keys()), dtype=np.int
-                    )
-                    residue_n.sort()
-                    residue_n = np.array(residue_n, dtype=str)
-                    for residue_id in residue_n:
-                        # Extract residue info:
-                        residue_label = dataset_file[pdb_code][chain_id][
-                            str(residue_id)
-                        ].attrs["label"]
+        for pdb_code, pdb_group in dataset_file.items():
+            for chain_id, chain_group in pdb_group.items():
+                for residue_id, residue_group in chain_group.items():
+                    residue_label = residue_group.attrs["label"]
 
-                        if residue_label in standard_residues:
-                            pass
-                        # If uncommon, attempt conversion of label
-                        elif residue_label in UNCOMMON_RESIDUE_DICT.keys():
-                            warnings.warn(f"{residue_label} is not a standard residue.")
-                            # Convert residue to common residue
-                            residue_label = UNCOMMON_RESIDUE_DICT[residue_label]
-                            warnings.warn(f"Residue converted to {residue_label}.")
+                    if residue_label not in standard_residues:
+                        # Convert uncommon residue if applicable
+                        new_label = UNCOMMON_RESIDUE_DICT.get(residue_label)
+                        if new_label:
+                            warnings.warn(
+                                f"{residue_label} is not standard; converted to {new_label}."
+                            )
+                            residue_label = new_label
                         else:
-                            assert (
-                                residue_label in standard_residues
-                            ), f"Expected natural amino acid, but got {residue_label}."
+                            raise ValueError(
+                                f"Unexpected residue label: {residue_label}"
+                            )
 
-                        flat_dataset_map.append(
-                            (pdb_code, chain_id, residue_id, residue_label)
-                        )
-                        training_set_pdbs.add(pdb_code)
-            else:
-                if remove_blacklist_silently:
-                    warnings.warn(
-                        f"PDB code {pdb_code} was found in benchmark dataset. It was automatically removed."
+                    flat_dataset_map.append(
+                        (pdb_code, chain_id, residue_id, residue_label)
                     )
-                else:
-                    raise ValueError(
-                        f"PDB code {pdb_code} was found in benchmark dataset. "
-                        f"Turn on remove_blacklist_silently=True if you want to"
-                        f" ignore these structures for training."
-                    )
+
+                training_set_pdbs.add(pdb_code)  # Add after processing the chain
 
     return flat_dataset_map, training_set_pdbs
 
@@ -509,7 +433,6 @@ def load_batch(
     """
     # Calcualte catch size
     batch_size = len(data_point_batch)
-    remove_idx = []
     # Open hdf5:
     with h5py.File(str(dataset_path), "r") as dataset:
         dims = dataset.attrs["frame_dims"]
@@ -533,7 +456,7 @@ def load_batch(
 def convert_dataset_map_for_srb(
     flat_dataset_map: list,
     model_name: str,
-    path_to_output: Path = Path.cwd(),
+    path_to_benchmark_map: Path,
 ):
     """
     Converts datasetmap for compatibility with PDBench / Sequence recovery benchmark
@@ -544,8 +467,6 @@ def convert_dataset_map_for_srb(
         Dataset map list
     model_name: str
         Name of model
-    path_to_output: Path
-        Path to output directory. Defaults to current working directory.
     """
     count_dict = {}
     for i, (pdb, chain, res_idx, _) in enumerate(flat_dataset_map):
@@ -559,8 +480,7 @@ def convert_dataset_map_for_srb(
 
         count_dict[pdb] += 1
 
-    path_to_datasetmap = path_to_output / f"{model_name}.txt"
-    with open(path_to_datasetmap, "w") as d:
+    with open(path_to_benchmark_map, "w") as d:
         d.write("ignore_uncommon False\ninclude_pdbs\n##########\n")
         for pdb, count in count_dict.items():
             d.write(f"{pdb} {count}\n")
@@ -593,7 +513,9 @@ def save_consensus_probs(
 
 
 def save_dict_to_fasta(
-    pdb_to_sequence: dict, model_name: str, path_to_output: Path = Path.cwd(),
+    pdb_to_sequence: dict,
+    model_name: str,
+    path_to_output: Path = Path.cwd(),
 ):
     """
     Saves a dictionary of protein sequences to a fasta file.
@@ -616,9 +538,6 @@ def save_dict_to_fasta(
 def extract_sequence_from_pred_matrix(
     flat_dataset_map: t.List[t.Tuple],
     prediction_matrix: np.ndarray,
-    rotamers_categories: t.List[str],
-    old_datasetmap: bool = False,
-    is_consensus: bool = False,
 ) -> (dict, dict, dict, dict, dict):
     """
     Extract sequence from prediction matrix and create pdb_to_sequence and
@@ -636,139 +555,36 @@ def extract_sequence_from_pred_matrix(
     -------
     pdb_to_sequence: dict
         Dictionary {pdb_code: predicted_sequence}
-    pdb_to_sequence: dict
+    pdb_to_real_sequence: dict
         Dictionary {pdb_code: sequence}
     pdb_to_probability: dict
         Dictionary {pdb_code: probability}
     """
     pdb_to_sequence = {}
-    pdb_to_probability = {}
     pdb_to_real_sequence = {}
-    pdb_to_consensus = {}
-    pdb_to_consensus_prob = {}
+    pdb_to_probability = {}
 
     res_to_r_dic = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
-    if rotamers_categories:
-        if len(rotamers_categories[0]) == 1:
-            res_dic = rotamers_categories
-        else:
-            res_dic = [res_to_r_dic[res.split("_")[0]] for res in rotamers_categories]
-    else:
-        res_dic = list(standard_amino_acids.keys())
+    res_dic = list(standard_amino_acids.keys())
     # Extract max idx for prediction matrix:
     max_idx = np.argmax(prediction_matrix, axis=1)
     # Loop through dataset map to create dictionaries:
-    previous_count = 0
-    old_datasetmap = True if len(flat_dataset_map[0]) == 4 else False
     for i in range(len(flat_dataset_map)):
-        # Add support for different dataset maps:
-        if old_datasetmap:
-            pdb_chain, chain, _, res = flat_dataset_map[i]
-            count = 1
-        else:
-            pdb_chain, count = flat_dataset_map[i]
-            count = int(count)
-            chain = ""
+        pdb_chain, chain, _, res = flat_dataset_map[i]
         pdb_chain += chain
         # Prepare the dictionaries:
         if pdb_chain not in pdb_to_sequence:
             pdb_to_sequence[pdb_chain] = ""
             pdb_to_real_sequence[pdb_chain] = ""
             pdb_to_probability[pdb_chain] = []
-        # Loop through map:
-        for n in range(previous_count, previous_count + count):
-            if old_datasetmap:
-                idx = i
-            else:
-                idx = n
 
-            pred = list(prediction_matrix[idx])
-            curr_res = res_dic[max_idx[idx]]
-            pdb_to_probability[pdb_chain].append(pred)
-            pdb_to_sequence[pdb_chain] += curr_res
-            if old_datasetmap:
-                pdb_to_real_sequence[pdb_chain] += res_to_r_dic[res]
-        if not old_datasetmap:
-            previous_count += count
+        pred = list(prediction_matrix[i])
+        curr_res = res_dic[max_idx[i]]
+        pdb_to_probability[pdb_chain].append(pred)
+        pdb_to_sequence[pdb_chain] += curr_res
+        pdb_to_real_sequence[pdb_chain] += res_to_r_dic[res]
 
-    if is_consensus:
-        last_pdb = ""
-        # Sum up probabilities:
-        for pdb_chain in pdb_to_sequence.keys():
-            curr_pdb = pdb_chain.split("_")[0]
-            if last_pdb != curr_pdb:
-                pdb_to_consensus_prob[curr_pdb] = np.array(pdb_to_probability[pdb_chain])
-                last_pdb = curr_pdb
-            else:
-                pdb_to_consensus_prob[curr_pdb] = (
-                    pdb_to_consensus_prob[curr_pdb] + np.array(pdb_to_probability[pdb_chain])
-                ) / 2
-        # Extract sequences from consensus probabilities:
-        for pdb_chain in pdb_to_consensus_prob.keys():
-            pdb_to_consensus[pdb_chain] = ""
-            curr_prob = pdb_to_consensus_prob[pdb_chain]
-            max_idx = np.argmax(curr_prob, axis=1)
-            for m in max_idx:
-                curr_res = res_dic[m]
-                pdb_to_consensus[pdb_chain] += curr_res
-
-        return (
-            pdb_to_sequence,
-            pdb_to_probability,
-            pdb_to_real_sequence,
-            pdb_to_consensus,
-            pdb_to_consensus_prob,
-        )
-    else:
-        return pdb_to_sequence, pdb_to_probability, pdb_to_real_sequence, None, None
-
-
-def save_outputs_to_file(
-    y_true: np.ndarray,
-    y_pred: np.ndarray,
-    flat_dataset_map: t.List[t.Tuple],
-    model: int,
-    model_name: str,
-    path_to_output: Path = Path.cwd(),
-):
-    """
-    Saves predictions for a specific model to file.
-
-    Parameters
-    ----------
-    y_true: np.ndarray
-        Numpy array of labels (int) 0 or 1.
-    y_pred: np.ndarray
-        Numpy array of predictions (float) range 0 - 1
-    flat_dataset_map: t.List[t.Tuple]
-        List of tuples with the order
-        [... (pdb_code, chain_id, residue_id,  residue_label, encoded_residue) ...]
-    model: int
-        Number of the model being used.
-    model_name: int
-        Name of the model being used.
-    path_to_output: Path
-        Path to output directory. Defaults to current working directory.
-    """
-    path_to_encoded_labels = path_to_output / "encoded_labels.csv"
-    path_to_datasetmap = path_to_output / "datasetmap.txt"
-    path_to_predictions = path_to_output / f"{model_name}.csv"
-    # Save dataset map only at the beginning:
-    if model == 0:
-        with open(path_to_encoded_labels, "a") as f:
-            y_true = np.asarray(y_true)
-            np.savetxt(f, y_true, delimiter=",", fmt="%i")
-    flat_dataset_map = np.asarray(flat_dataset_map)
-    # Save dataset map only at the beginning:
-    if path_to_datasetmap.exists() == False:
-        with open(path_to_datasetmap, "a") as f:
-            # Output Dataset Map to txt:
-            np.savetxt(f, flat_dataset_map, delimiter=",", fmt="%s")
-
-    predictions = np.array(y_pred[model], dtype=np.float16)
-    # Output model predictions:
-    with open(path_to_predictions, "a") as f:
-        np.savetxt(f, predictions, delimiter=",")
+    return pdb_to_sequence, pdb_to_probability, pdb_to_real_sequence
 
 
 def create_map_alphanumeric_code(property_map: np.ndarray, k: int = 32) -> str:

@@ -40,7 +40,16 @@ from design_utils.utils import (
 )
 from design_utils.utils import compress_rotamer_predictions_to_20
 
-# input type is either ampal.Assembly or ampal.Polypeptide
+from typing import NamedTuple
+
+
+class SequenceMetrics(NamedTuple):
+    charge: float
+    isoelectric_point: float
+    molecular_weight: float
+    extinction_280: float
+
+
 def tag_packing_density(
     structure: t.Union[ampal.Polymer, ampal.Assembly], radius: float = 7
 ) -> None:
@@ -348,7 +357,7 @@ def create_sequence_logo(prediction_matrix: np.ndarray) -> Figure:
     return seq_logo.ax.get_figure()
 
 
-def calculate_seq_metrics(seq: str) -> t.Tuple[float, float, float, float]:
+def calculate_seq_metrics(seq: str) -> SequenceMetrics:
     """
     Calculates sequence metrics.
 
@@ -361,15 +370,14 @@ def calculate_seq_metrics(seq: str) -> t.Tuple[float, float, float, float]:
 
     Returns
     -------
-    metrics: t.Tuple[float, float, float, float]
-        (charge , iso_ph, mw, me)
+    SequenceMetrics
+        NamedTuple with fields: charge, isoelectric_point, molecular_weight, extinction_280
     """
     charge = sequence_charge(seq)
     iso_ph = sequence_isoelectric_point(seq)
     mw = sequence_molecular_weight(seq)
     me = sequence_molar_extinction_280(seq)
-    return charge, iso_ph, mw, me
-
+    return SequenceMetrics(charge, iso_ph, mw, me)
 
 def save_assembly_to_path(structure: ampal.Assembly, output_dir: Path, name: str) -> None:
     """

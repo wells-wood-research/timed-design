@@ -130,14 +130,15 @@ python3 predict.py --path_to_dataset data.hdf5 --path_to_model TIMED.h5 --path_t
 
 - `encoded_labels.csv` , Sequences from `dataset.fasta` encoded in labels.  
 
-### 1.3 Predicting Rotamers
+### 1.3 Residue Design Policy
 
-In order to use a rotamer model, use the flag `--predict_rotamers True`:
+| Case                                                   | `--residues_to_redesign` | `--residues_to_fix` | Unspecified Residues    | Behavior                                                                 |
+|--------------------------------------------------------|---------------------------|----------------------|--------------------------|--------------------------------------------------------------------------|
+| Redesign everything                                    | ❌                        | ❌                   | All                      | All residues are redesigned                                              |
+| Redesign only specific residues                        | ✅                        | ❌                   | All others               | Fixed to wild-type                                                       |
+| Fix only specific residues                             | ❌                        | ✅                   | All others               | Redesigned                                                               |
+| Redesign some, fix others (WT or mutated), fix rest to WT | ✅                        | ✅                   | All others               | Fixed to wild-type                                                       |
 
-
-```
-python3 predict.py --path_to_dataset dataset.hdf5 --path_to_model timed_rot.h5 --predict_rotamers True
-```
 
 ### 1.4 Run User Interface (UI)
 

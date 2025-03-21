@@ -6,7 +6,7 @@ from multiprocessing import Pool
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
 
-from design_utils.analyse_utils import calculate_seq_metrics
+from design_utils.analyse_utils import SequenceMetrics, calculate_seq_metrics
 
 
 def save_as(pdb_to_sampled: dict, filename: str, mode: str):
@@ -54,7 +54,6 @@ def random_choice_prob_index(
     probs: np.ndarray,
     axis: int = 1,
     return_seq: bool = True,
-    rotamer_categories: t.Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
     Samples from a probability distribution and returns a sequence or the indeces sampled.
@@ -69,8 +68,6 @@ def random_choice_prob_index(
         Axis along which to select.
     return_seq: bool
         Whether to return a residue sequence (True) or the index (False)
-    rotamer_categories: t.Optional[np.ndarray, None]
-        Optionally rotamer categories can be used for sampling.
 
     Returns
     -------
@@ -81,10 +78,7 @@ def random_choice_prob_index(
     r = np.expand_dims(np.random.rand(probs.shape[1 - axis]), axis=axis)
     idxs = (probs.cumsum(axis=axis) > r).argmax(axis=axis)
     if return_seq:
-        if rotamer_categories:
-            res = np.array(rotamer_categories)
-        else:
-            res = np.array(list(standard_amino_acids.keys()))
+        res = np.array(list(standard_amino_acids.keys()))
         return res[idxs]
     else:
         return idxs
@@ -93,9 +87,8 @@ def random_choice_prob_index(
 def sample_from_sequences(
     pdb: str,
     sample_n: int,
-    pdb_to_probability: dict,
-    rotamer_categories: t.Optional[np.ndarray],
-) -> dict:
+    pdb_to_probability: t.Dict[str, np.ndarray],
+) -> t.Dict[str, t.List[t.Tuple[str, SequenceMetrics]]]:
     """
     Sample from pdb sequences sample_n times.
 
@@ -106,37 +99,31 @@ def sample_from_sequences(
     sample_n: int
         Number of samples to be drawn
     pdb_to_probability: dict
-        Dict {pdb: probability_distribution}
-    rotamer_categories: t.Optional[np.ndarray, None]
-        Whether to sample from a rotamer distribution or not.
+        Mapping from PDB ID to a list of residue-level probability distributions.
 
     Returns
     -------
     pdb_to_sample: dict
-        Dict {pdb: [(n, n_sample)]}
-
+        Mapping from PDB ID to list of tuples, each containing a sampled sequence and its computed sequence metrics.
     """
-    pdb_to_sample = {}
     # Sample from distribution
     sampled_seq_list = []
-    # TODO parallelize:
-    for i in range(sample_n):
+    for _ in range(sample_n):
         seq_list = random_choice_prob_index(
             np.array(pdb_to_probability[pdb]),
             return_seq=True,
-            rotamer_categories=rotamer_categories,
         )
         # Join seq from residue list to one string
         sampled_seq = "".join(seq_list)
         # Calculate sequence metrics
         metrics_tuple = calculate_seq_metrics(sampled_seq)
-        sampled_seq_list.append((sampled_seq, *metrics_tuple))
-    pdb_to_sample[pdb] = sampled_seq_list
-
-    return pdb_to_sample
+        sampled_seq_list.append((sampled_seq, metrics_tuple))
 
 
-def apply_temp_to_probs(probs: np.ndarray, t: int = 1.0):
+    return {pdb: sampled_seq_list}
+
+
+def apply_temp_to_probs(probs: np.ndarray, t: float = 1.0):
     """
     Applies a temperature factor to a softmax output probability.
 
@@ -162,7 +149,7 @@ def apply_temp_to_probs(probs: np.ndarray, t: int = 1.0):
 
 
 def sample_with_multiprocessing(
-    workers, pdb_codes, sample_n, pdb_to_probability, flat_categories
+    workers, pdb_codes, sample_n, pdb_to_probability,
 ):
     """
 
@@ -172,7 +159,6 @@ def sample_with_multiprocessing(
     pdb_codes
     sample_n
     pdb_to_probability
-    flat_categories
 
     Returns
     -------
@@ -185,7 +171,6 @@ def sample_with_multiprocessing(
                 pdb_codes,
                 repeat(sample_n),
                 repeat(pdb_to_probability),
-                repeat(flat_categories),
             ),
         )
         p.close()
