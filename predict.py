@@ -1,4 +1,6 @@
 import argparse
+import typing as t
+from dataclasses import dataclass
 from math import ceil
 from pathlib import Path
 import re
@@ -10,17 +12,14 @@ from numpy import genfromtxt
 from tensorflow.python.keras.metrics import top_k_categorical_accuracy
 from tqdm import tqdm
 
+from design_utils.sampling_utils import apply_temp_to_probs, sample_with_multiprocessing
 from design_utils.utils import (
     convert_dataset_map_for_srb,
     create_flat_dataset_map,
     extract_sequence_from_pred_matrix,
-    get_pdb_keys_to_filter,
-    get_rotamer_codec,
     load_batch,
-    save_consensus_probs,
-    save_dict_to_fasta,
-    save_outputs_to_file,
 )
+
 
 @dataclass(frozen=True)
 class ResidueTarget:
@@ -29,21 +28,52 @@ class ResidueTarget:
     resnum: int
     target_aa: Optional[str] = None  # None = wild-type
 
+
 def top_3_cat_acc(y_true, y_pred):
     return top_k_categorical_accuracy(y_true, y_pred, k=3)
 
 
+def get_residue_index_map(flat_dataset_map: np.ndarray) -> Tuple[np.ndarray, dict]:
+    """
+    Sorts the flat dataset map by integer PDB residue index (column 3) and
+    returns a mapping from (pdb_id, chain, pdb_resnum) to sequence index.
+
+    Parameters
+    ----------
+    flat_dataset_map : np.ndarray
+        Array of shape (N, 4+) with columns [pdb_id, chain_id, pdb_resnum, ...].
+
+    Returns
+    -------
+    sorted_map : np.ndarray
+        Dataset map sorted by integer residue number.
+    residue_to_index : dict
+        Mapping {(pdb_id, chain, pdb_resnum: int) -> index_in_sequence}
+    """
+    # Parse integer version of residue numbers
+    resnums = flat_dataset_map[:, 2].astype(int)
+    sorted_indices = np.argsort(resnums)
+    sorted_map = flat_dataset_map[sorted_indices]
+
+    residue_to_index = {
+        (row[0], row[1], int(row[2])): i
+        for i, row in enumerate(sorted_map)
+    }
+
+    return sorted_map, residue_to_index
+
+
+
 def load_dataset_and_predict(
-    models: list,
+    model: Path,
     dataset_path: Path,
-    batch_size: int = 20,
-    start_batch: int = 0,
-    dataset_map_path: Path = "datasetmap.txt",
-    blacklist: Path = None,
-    predict_rotamers: bool = False,
-    model_name_suffix: str = "",
-    is_consensus: bool = False,
-    path_to_output: Path = Path.cwd(),
+    path_to_output: Path,
+    batch_size: int,
+    sample_n: int,
+    temperature: float = 1,
+    workers: int = 1,
+    residues_to_fix: Optional[t.List[ResidueTarget]] = None,
+    residues_to_redesign: Optional[t.List[ResidueTarget]] = None,
 ) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
     """
     Load discretized frame dataset (should be the same format as the trained models),
@@ -53,26 +83,12 @@ def load_dataset_and_predict(
 
     Parameters
     ----------
-    models: t.List[StrOrPath]
-        List of paths to the models to be used for the ensemble
+    model: Path
+        Path to the trained model.
     dataset_path: Path
         Path to the dataset with frames.
     batch_size: int
         Number of frames to be looked predicted at once.
-    start_batch:
-        Which batch to start from. In case the code crashes you can check which
-        was the last batch used and restart from there. Make sure you remove the
-        other models from the paths to be used.
-    dataset_map_path: Path
-        Path to the dataset map
-    blacklist: Path
-        Path to blacklist of structures to be filtered out (ie. not predicted)
-    predict_rotamers: Bool
-        Whether to predict 338 classes of rotamers or just the 20 amino acids
-    model_name_suffix: str
-        Suffix to be added to predictions which indicates model name
-    is_consensus: Bool
-        Whether the structure is NMR and the prediction should be a consensus of all the states
     path_to_output: Path
         Path to output directory. Defaults to current working directory.
 
@@ -92,125 +108,84 @@ def load_dataset_and_predict(
     pdb_to_consensus_prob: dict
         Dictionary {pdb_code: consensus_probability}
     """
+    # assume user passed HDF5 file TODO: Do this for PDB inputs as well
+
     # Import top3 accuracy:
     tf.keras.utils.get_custom_objects()["top_3_cat_acc"] = top_3_cat_acc
+    path_to_datasetmap = path_to_output / f"{dataset_path.stem}.txt"
 
-    n_classes = 338 if predict_rotamers else 20
-    print(f"Running model on {n_classes} classes. Rotamer Mode is {predict_rotamers}")
-    # Get list of banned pdbs from the benchmark:
-    if blacklist:
-        filter_pdb_list = get_pdb_keys_to_filter(blacklist)
-    else:
-        filter_pdb_list = []
     # If dataset map exists, load it from path:
-    if Path(dataset_map_path).exists():
-        flat_dataset_map = genfromtxt(dataset_map_path, delimiter=",", dtype="str")
+    if Path(path_to_datasetmap).exists():
+        flat_dataset_map = genfromtxt(path_to_datasetmap, delimiter=",", dtype="str")
     else:
         # Create flat_map:
         flat_dataset_map, training_set_pdbs = create_flat_dataset_map(
-            dataset_path, filter_pdb_list
+            dataset_path,
         )
-    old_datasetmap = True if len(flat_dataset_map[0]) == 4 else False
+        # Save flat map to file:
+        np.savetxt(path_to_datasetmap, flat_dataset_map, delimiter=",", fmt="%s")
 
-    if predict_rotamers:
-        codec, flat_categories = get_rotamer_codec()
-    else:
-        codec, flat_categories = None, None
+    # Create a dictionary of position in the dataset map and position in the sequence
+    flat_dataset_map, residue_to_index = get_residue_index_map(flat_dataset_map)
     # Calculate number of batches
     n_batches = ceil(len(flat_dataset_map) / batch_size)
-    # For each model:
-    for i, m in enumerate(models):
-        # Extract model names:
-        if isinstance(m, Path):
-            model_name = m.stem + model_name_suffix
-        else:
-            model_name = str(m) + model_name_suffix
-        # Import Model:
-        frame_model = tf.keras.models.load_model(Path(m))
-        # Create output file for model:
-        model_out = path_to_output / (
-            "{model_name}" + "_rot.csv"
-            if predict_rotamers
-            else f"{model_name}" + ".csv"
+    # Extract model name
+    model_name = model.stem
+    # Import Model:
+    frame_model = tf.keras.models.load_model(model)
+    # Create output file for model:
+    path_to_prediction_probs = path_to_output / f"{dataset_path.stem}_model_{model_name}.csv"
+    # Load batch:
+    for index in tqdm(
+        range(0, n_batches),
+        desc=f"Processing batch of model {model_name}",
+    ):
+        # Extract current batch map:
+        current_batch_map = flat_dataset_map[
+            index * batch_size : (index + 1) * batch_size
+        ]
+        X_batch, y_true_batch = load_batch(
+            dataset_path,
+            current_batch_map,
         )
-        # Load batch:
-        for index in tqdm(
-            range(start_batch, n_batches),
-            desc=f"Processing batch of model {model_name}",
-        ):
-            # Initialize array for predictions:
-            y_true = []
-            # Initialize dictionary with {model_number : [predictions]}
-            y_pred = {k: [] for k in range(len(models))}
-            # Extract current batch map:
-            current_batch_map = flat_dataset_map[
-                index * batch_size : (index + 1) * batch_size
-            ]
-            X_batch, y_true_batch = load_batch(
-                dataset_path,
-                current_batch_map,
-            )
-            # Make Predictions
-            y_pred_batch = frame_model.predict(X_batch)
-            if predict_rotamers:
-                # Output model predictions:
-                with open(model_out, "a") as f:
-                    np.savetxt(f, y_pred_batch, delimiter=",")
-                current_batch = np.argmax(y_pred_batch, axis=1)
-                y_pred_batch = np.array([codec[c] for c in current_batch])
-                del current_batch
-            # Add predictions labels to dictionary:
-            y_pred[i].extend(y_pred_batch)
-            # Save current labels:
-            y_true.extend(y_true_batch)
-            # Save to output file:
-            save_outputs_to_file(
-                y_true, y_pred, flat_dataset_map, i, model_name, path_to_output
-            )
-            # Reset to avoid memory errors
-            del y_true
-            del y_pred
-        flat_dataset_map = np.array(flat_dataset_map)
-        # Output datasetmap compatible with sequence recovery benchmark:
-        convert_dataset_map_for_srb(flat_dataset_map, model_name, path_to_output)
-        # Load prediction matrix
-        prediction_matrix = genfromtxt(model_out, delimiter=",", dtype=np.float16)
-        # Save as Fasta file:
-        (
-            pdb_to_sequence,
-            pdb_to_probability,
-            pdb_to_real_sequence,
-            pdb_to_consensus,
-            pdb_to_consensus_prob,
-        ) = extract_sequence_from_pred_matrix(
-            flat_dataset_map,
-            prediction_matrix,
-            rotamers_categories=flat_categories if predict_rotamers else None,
-            old_datasetmap=old_datasetmap,
-            is_consensus=is_consensus,
-        )
-        save_dict_to_fasta(pdb_to_sequence, model_name, path_to_output)
-        save_dict_to_fasta(pdb_to_real_sequence, "dataset", path_to_output)
-        if pdb_to_consensus:
-            save_dict_to_fasta(
-                pdb_to_consensus,
-                model_name + "_consensus",
-            )
-            save_consensus_probs(pdb_to_consensus_prob, model_name, path_to_output)
+        # Make Predictions
+        y_pred_batch = frame_model.predict(X_batch)
+        # Save predictions to file:
+        with open(path_to_prediction_probs, "a") as f:
+            np.savetxt(f, y_pred_batch, delimiter=",")
 
-    return (
-        flat_dataset_map,
+    flat_dataset_map = np.array(flat_dataset_map)
+    # Create output file for model:
+    path_to_benchmark_map = path_to_output / f"{dataset_path.stem}_model_{model_name}.txt"
+    # Output datasetmap compatible with sequence recovery benchmark:
+    convert_dataset_map_for_srb(flat_dataset_map, model_name, path_to_benchmark_map)
+    # Load prediction matrix
+    prediction_matrix = genfromtxt(
+        path_to_prediction_probs, delimiter=",", dtype=np.float16
+    )
+    # Apply temperature factor to prediction matrix:
+    if temperature != 1:
+        prediction_matrix = apply_temp_to_probs(prediction_matrix, t=temperature)
+
+    (
         pdb_to_sequence,
         pdb_to_probability,
         pdb_to_real_sequence,
-        pdb_to_consensus,
-        pdb_to_consensus_prob,
+    ) = extract_sequence_from_pred_matrix(
+        flat_dataset_map,
+        prediction_matrix,
     )
+    pdb_codes = list(pdb_to_probability.keys())
+    print(f"Ready to sample {sample_n} sequences for {len(pdb_codes)} proteins.")
+    pdb_to_sampled = sample_with_multiprocessing(
+        workers, pdb_codes, sample_n, pdb_to_probability
+    )
+
 
 
 def _check_residue_format(
     res_list: Optional[str], single_pdb_id: Optional[str] = None
-) -> List[Tuple[str, str]]:
+) -> List[ResidueTarget]:
     """
     Validates and parses a list of residue identifiers for redesign or fixation.
 
@@ -254,22 +229,26 @@ def _check_residue_format(
 
         if ":" in item:
             if not pattern_with_pdb.match(item):
-                raise ValueError(
-                    f"Invalid residue format: '{item}'. Expected format: <pdb_id>:<chain><resnum>[<AA>], e.g., 1XYZ:A12 or 1XYZ:A12P"
-                )
+                raise ValueError(f"Invalid residue format: {item}")
             pdb_id, res = item.split(":")
         else:
             if not single_pdb_id:
-                raise ValueError(f"Residue '{item}' missing pdb_id in multi-PDB mode.")
+                raise ValueError(f"Missing pdb_id for residue '{item}'")
             if not pattern_single.match(item):
-                raise ValueError(
-                    f"Invalid residue format: '{item}'. Expected format: <chain><resnum>[<AA>], e.g., A12 or A12P"
-                )
+                raise ValueError(f"Invalid residue format: {item}")
             pdb_id, res = single_pdb_id, item
 
-        parsed.append((pdb_id, res))
+        chain = res[0]
+        i = 1
+        while i < len(res) and res[i].isdigit():
+            i += 1
+        resnum = int(res[1:i])
+        target_aa = res[i] if i < len(res) else None
+
+        parsed.append(ResidueTarget(pdb_id, chain, resnum, target_aa))
 
     return parsed
+
 
 def _check_duplicates(residue_list: List[ResidueTarget], label: str):
     seen = set()
@@ -278,6 +257,7 @@ def _check_duplicates(residue_list: List[ResidueTarget], label: str):
         if key in seen:
             raise ValueError(f"Duplicate entry in {label}: {key}")
         seen.add(key)
+
 
 def main(args):
     (
@@ -288,15 +268,14 @@ def main(args):
         pdb_to_consensus,
         pdb_to_consensus_prob,
     ) = load_dataset_and_predict(
-        [args.path_to_model],
+        args.path_to_model,
         args.path_to_dataset,
         batch_size=args.batch_size,
-        start_batch=0,
-        blacklist=args.path_to_blacklist,
-        dataset_map_path=args.path_to_datasetmap,
-        predict_rotamers=args.predict_rotamers,
-        is_consensus=args.is_structure_nmr,
         path_to_output=args.path_to_output,
+        sample_n=args.sample_n,
+        temperature=1,
+        workers=args.workers,
+
     )
 
 
@@ -366,16 +345,22 @@ if __name__ == "__main__":
         )
     # Check residue format
     default_pdb_id = "default"
-    fix_targets_raw = _check_residue_format(params.residues_to_fix, single_pdb_id=default_pdb_id)
-    redesign_targets_raw = _check_residue_format(params.residues_to_redesign, single_pdb_id=default_pdb_id)
+    params.residues_to_fix = _check_residue_format(
+        params.residues_to_fix, single_pdb_id=default_pdb_id
+    )
+    params.residues_to_redesign = _check_residue_format(
+        params.residues_to_redesign, single_pdb_id=default_pdb_id
+    )
     # Check for duplicates
-    _check_duplicates(fix_targets_raw, "residues_to_fix")
-    _check_duplicates(redesign_targets_raw, "residues_to_redesign")
-    # Check for cross-conflicts
-    fix_keys = {(r.pdb_id, r.chain, r.resnum) for r in fix_targets_raw}
-    redesign_keys = {(r.pdb_id, r.chain, r.resnum) for r in redesign_targets_raw}
+    _check_duplicates(params.residues_to_fix, "residues_to_fix")
+    _check_duplicates(params.residues_to_redesign, "residues_to_redesign")
 
+    fix_keys = {(r.pdb_id, r.chain, r.resnum) for r in params.residues_to_fix}
+    redesign_keys = {(r.pdb_id, r.chain, r.resnum) for r in params.residues_to_redesign}
     overlap = fix_keys & redesign_keys
     if overlap:
-        raise ValueError(f"Residues defined in both --residues_to_fix and --residues_to_redesign: {sorted(overlap)}")
+        raise ValueError(
+            f"The same residues cannot be defined in both --residues_to_fix and --residues_to_redesign: {sorted(overlap)}. Please choose one."
+        )
+
     main(params)
