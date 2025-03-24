@@ -1,6 +1,6 @@
 import numpy as np
 
-from design_utils.sampling_utils import apply_temp_to_probs, random_choice_prob_index
+from design.sampling import apply_temp_to_probs, random_choice_prob_index
 
 theoretical_prob = [
     [

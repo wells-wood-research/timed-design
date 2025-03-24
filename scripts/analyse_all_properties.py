@@ -3,6 +3,7 @@ Similar to analyse_af2.py but for output of move_af2_pdb
 """
 import argparse
 import tempfile
+import typing as t
 from itertools import repeat
 from multiprocessing import Pool
 from pathlib import Path
@@ -11,11 +12,8 @@ import ampal
 import numpy as np
 import pymol
 from sklearn import metrics
-from design_utils.analyse_utils import (
-    extract_packdensity_from_ampal,
-    extract_bfactor_from_ampal,
-    extract_prediction_entropy_to_dict,
-)
+from analysis.sequence import (extract_prediction_entropy_to_dict, )
+from analysis.shape import calculate_packing_density
 
 
 def calculate_RMSD_and_gdt(pdb_original_path, pdb_predicted_path) -> (float, float):
@@ -165,3 +163,98 @@ if __name__ == "__main__":
     # Launch PyMol:
     params = parser.parse_args()
     main(params)
+
+
+def extract_packdensity_from_ampal(
+    pdb: t.Union[str, Path], load_pdb: bool = True, atom_filter: str = "ca"
+) -> t.List[float]:
+    """
+    Extracts packing density from ampal assembly or polypeptide
+
+    Parameters
+    ----------
+    pdb: t.Union[str, Path]
+        Path to pdb file or pdb string
+    load_pdb: bool
+        Whether to load pdb file or not
+    atom_filter: str
+        Atom filter function to use. Can be "backbone", "ca" or "all"
+
+    Returns
+    -------
+    all_packdensity: t.List[float]
+        List of packing density for each residue in assembly or polypeptide
+
+    """
+    all_packdensity = []
+    if load_pdb:
+        assembly = ampal.load_pdb(pdb)
+    else:
+        assembly = pdb
+    if isinstance(assembly, ampal.AmpalContainer):
+        assembly = assembly[0]
+    if isinstance(assembly, ampal.Assembly):
+        packdensity = calculate_packing_density(assembly, atom_filter)
+        all_packdensity.append(packdensity)
+
+    return all_packdensity
+
+
+def _extract_bfactor_from_polypeptide(assembly: ampal.Polypeptide) -> t.List[float]:
+    """
+    Extracts bfactor from ampal polypeptide
+
+    Parameters
+    ----------
+    assembly: ampal.Polypeptide
+        Ampal polypeptide to extract bfactor from.
+
+    Returns
+    -------
+
+    """
+    bfactors = []
+    # Extract iddt for each residue
+    for res in assembly:
+        # All the atoms have the same bfactor (iddt) so select first atom:
+        first_atom = list(res.atoms.keys())[0]
+        curr_iddt = res.atoms[first_atom].tags["bfactor"]
+        bfactors.append(curr_iddt)
+    return bfactors
+
+
+def extract_bfactor_from_ampal(pdb_path: Path, load_pdb: bool = True) -> t.List[float]:
+    """
+    Extracts bfactor from ampal assembly or polypeptide
+
+    Parameters
+    ----------
+    pdb_path: Path
+        Path to pdb file or ampal assembly
+    load_pdb: bool
+        Whether to load pdb file or not
+
+    Returns
+    -------
+    all_b_factors: t.List[float]
+        List of bfactor for each residue in assembly or polypeptide
+
+    """
+    all_b_factors = []
+    if load_pdb:
+        assembly = ampal.load_pdb(pdb_path)
+    else:
+        assembly = pdb_path
+
+    if isinstance(assembly, ampal.AmpalContainer):
+        assembly = assembly[0]
+    if isinstance(assembly, ampal.Assembly):
+        for assem in assembly:
+            if isinstance(assem, ampal.Polypeptide):
+                bfactors = _extract_bfactor_from_polypeptide(assem)
+                all_b_factors.append(bfactors)
+    elif isinstance(assembly, ampal.Polypeptide):
+        bfactors = _extract_bfactor_from_polypeptide(assembly)
+        all_b_factors.append(bfactors)
+
+    return all_b_factors

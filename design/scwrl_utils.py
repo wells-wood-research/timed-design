@@ -11,6 +11,7 @@ import typing as t
 from pathlib import Path
 
 import ampal
+from tqdm import tqdm
 
 
 def parse_scwrl_out(scwrl_std_out: str, scwrl_pdb: str):
@@ -173,3 +174,132 @@ def pack_side_chains_scwrl(
     new_assembly.tags["scwrl_score"] = scwrl_score
 
     return new_assembly
+
+
+def pack_sidechains(
+    structure: ampal.Assembly, sequence: str, scwrl_path: Path
+) -> ampal.Assembly:
+    """
+    Packs sequence of residues onto ampal assembly using SCWRL
+
+    Parameters
+    ----------
+    structure: ampal.Assembly
+        Ampal assembly to be saved
+    sequence: str
+        Sequence of amino acids
+
+    Returns
+    -------
+    packed_structure: ampal.Assembly
+        Packed structure with scwrl
+    """
+    return pack_side_chains_scwrl(
+        assembly=structure,
+        sequences=sequence,
+        rigid_rotamer_model=False,
+        scwrl_path=scwrl_path,
+    )
+
+
+def analyse_with_scwrl(
+    pdb_to_seq: dict,
+    pdb_to_assembly: dict,
+    output_path: Path,
+    suffix: str,
+    scwrl_path: Path,
+) -> (dict, dict):
+    """
+    Analyses rotamer prediction with SCWRL
+
+    Parameters
+    ----------
+    pdb_to_seq: dict
+        {pdb_code: sequence}
+    pdb_to_assembly:
+        {pdb_code: ampal_assembly}
+    output_path: Path
+        Path to save analysis to.
+    suffix: str
+        Additional information to add to file.
+
+    Returns
+    -------
+    pdb_to_scores: dict
+        Dict {pdb_code: scwrl_score}
+    pdb_to_errors: dict
+         Dict {pdb_code: Error}
+    """
+    pdb_to_scores = {}
+    pdb_to_errors = {}
+    # Loop through each PDB code and pack them with SCWRL:
+    for pdb in tqdm(
+        pdb_to_seq.keys(), desc=f"Packing sequence in PDB {suffix} with SCWRL"
+    ):
+        pdb_outpath = output_path / (pdb + "_" + suffix + ".pdb")
+        if pdb_outpath.exists():
+            error = f"PDB {pdb} at {pdb_outpath} already exists."
+            pdb_to_errors[pdb] = error
+        elif pdb[:4] in pdb_to_assembly.keys():
+            try:
+                # If there are more than one backbones, add their sequences up for SCWRL:
+                if len(pdb_to_assembly[pdb[:4]].backbone) > 1:
+                    pdb_to_seq[pdb] = [pdb_to_seq[pdb]] * len(pdb_to_assembly[pdb[:4]])
+                # Else structure is already monomeric - no need to add sequences
+                else:
+                    pdb_to_seq[pdb] = [
+                        pdb_to_seq[pdb]
+                    ]  # Sequences need to be in list for SCWRL4
+                # Attempt packing:
+                try:
+                    scwrl_structure = pack_sidechains(
+                        pdb_to_assembly[pdb[:4]], pdb_to_seq[pdb], scwrl_path=scwrl_path
+                    )
+                    pdb_to_scores[pdb] = scwrl_structure.tags["scwrl_score"]
+                    save_assembly_to_path(
+                        structure=scwrl_structure,
+                        output_dir=output_path,
+                        name=pdb + suffix,
+                    )
+                except ValueError as e:
+                    error = f"Attempted packing on structure {pdb}, but got {e}"
+                    pdb_to_errors[pdb] = error
+            except (ValueError, KeyError) as e:
+                error = f"Attempted selecting backbone on structure {pdb}, but got {e}"
+                pdb_to_errors[pdb] = error
+            except ChildProcessError as e:
+                error = f"Attempted selecting backbone on structure {pdb}, but SCWRL failed: {e}"
+                pdb_to_errors[pdb] = error
+        else:
+            error = f"Error with structure {pdb}. Assembly not found."
+            pdb_to_errors[pdb] = error
+    # Saves errors to file:
+    output_error_path = output_path / f"errors_scwrl{suffix}.csv"
+    print(
+        f"Got {len(pdb_to_errors)} errors when attempting to pack {len(pdb_to_seq)} sequences. Saved errors in file {output_error_path}"
+    )
+    with open(output_error_path, "w") as f:
+        for pdb, err in pdb_to_errors.items():
+            f.write(f"{pdb},{err}\n")
+    return pdb_to_scores, pdb_to_errors
+
+
+def save_assembly_to_path(
+    structure: ampal.Assembly, output_dir: Path, name: str
+) -> None:
+    """
+    Saves ampal assembly to specified path.
+
+    Parameters
+    ----------
+    structure: ampal.Assembly
+        Ampal assembly to be saved
+    output_dir: Path
+        Output Directory
+    name: str
+        Name of output File
+    """
+    # Save assembly to path:
+    output_path = output_dir / (name + ".pdb")
+    with open(output_path, "w") as f:
+        f.write(structure.pdb)

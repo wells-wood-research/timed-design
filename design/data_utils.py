@@ -1,19 +1,17 @@
 import gzip, sys, random, string
 import typing as t
 import warnings
-from itertools import product
+from collections import defaultdict
 from pathlib import Path
 
 import ampal
 import h5py
 import numpy as np
 from ampal.amino_acids import (
-    side_chain_dihedrals,
     standard_amino_acids,
     polarity_Zimmerman,
     residue_charge,
 )
-from numpy import genfromtxt
 
 from aposteriori.config import MAKE_FRAME_DATASET_VER, UNCOMMON_RESIDUE_DICT
 from aposteriori.data_prep.create_frame_data_set import DatasetMetadata
@@ -296,12 +294,12 @@ def create_flat_dataset_map(
     -------
     flat_dataset_map: List[Tuple[str, str, str, str]]
         Flattened dataset structure containing (pdb_code, chain_id, residue_id, residue_label).
-    training_set_pdbs: Set[str]
-        Set of all PDB codes included in the training/validation set.
+    pdb_set: Set[str]
+        Set of all PDB codes included in the dataset
     """
     standard_residues = set(standard_amino_acids.values())  # Use a set for O(1) lookups
     flat_dataset_map = []
-    training_set_pdbs = set()
+    pdbs_set = set()
 
     with h5py.File(frame_dataset, "r") as dataset_file:
         for pdb_code, pdb_group in dataset_file.items():
@@ -326,86 +324,9 @@ def create_flat_dataset_map(
                         (pdb_code, chain_id, residue_id, residue_label)
                     )
 
-                training_set_pdbs.add(pdb_code)  # Add after processing the chain
+                pdbs_set.add(pdb_code)  # Add after processing the chain
 
-    return flat_dataset_map, training_set_pdbs
-
-
-def get_rotamer_codec(return_reduction_guide: bool = False) -> t.Optional[t.List[int]]:
-    """
-    Creates a codec for tagging residues rotamers.
-
-    return_reduction_guide: Bool
-        Whether to return reduction guide to squash
-
-    Returns
-    -------
-    rot_to_20res: dict
-        Rotamer residues encoding of the format {rotamer_number : [ (20,) encoding ]}
-    flat_categories: t.List[str]
-        Categories of rotamers (338,) eg. ['ALA_0', 'CYS_1', 'CYS_2', 'CYS_3', 'ASP_11', 'ASP_12', 'ASP_13', ... ]
-    reduction_guide: t.Optional[t.List[str]]
-        List of int indicating which idxs to reduce:
-        [0, 1, 4, 13, 40, 49, 50, 59, 68, 149, 158, 185, 194, 203, 230, 311, 314, 317, 320, 329]
-        https://github.com/wells-wood-research/timed-design/issues/7
-    """
-    res_rot_to_encoding = {}
-    flat_categories = []
-    rot_to_20res = {}
-    all_count = 338
-    r_count = 0  # Number of rotamers processed so far
-    reduction_guide = []
-    for i, (a, res) in enumerate(standard_amino_acids.items()):
-        reduction_guide.append(r_count)
-        if res in side_chain_dihedrals:
-            n_rot = len(side_chain_dihedrals[res])
-            all_rotamers = list(product([1, 2, 3], repeat=n_rot))
-            encoding = np.arange(r_count, r_count + len(all_rotamers))
-            onehot_encoding = np.zeros((len(all_rotamers), all_count))
-            # Encodings are sorted so we can do encoding encoding
-            onehot_encoding[np.arange(0, len(encoding)), encoding] = 1
-            rot_to_encoding = dict(zip(all_rotamers, onehot_encoding))
-            res_rot_to_encoding[res] = rot_to_encoding
-            all_rotamers = np.array(all_rotamers, dtype=str)
-            for r, rota in enumerate(all_rotamers):
-                flat_categories.append(f"{res}_{''.join(rota)}")
-                rot_to_20res[r_count + r] = np.array([0] * 20)
-                rot_to_20res[r_count + r][i] = 1
-            r_count += len(all_rotamers)
-        # No rotamers available:
-        else:
-            n_rot = 1
-            onehot_encoding = np.array([0] * all_count)
-            onehot_encoding[r_count] = 1
-            rot_to_encoding = {(0,): onehot_encoding}
-            res_rot_to_encoding[res] = rot_to_encoding
-            flat_categories.append(f"{res}_0")
-            rot_to_20res[r_count] = np.array([0] * 20)
-            rot_to_20res[r_count][i] = 1
-            r_count += n_rot
-    if return_reduction_guide:
-        return rot_to_20res, flat_categories, reduction_guide
-    else:
-        return rot_to_20res, flat_categories
-
-
-def compress_rotamer_predictions_to_20(prediction_matrix: np.ndarray) -> np.ndarray:
-    """
-    Converts the rotamer prediction matrix from (n, 388) to (n, 20)
-
-    Parameters
-    ----------
-    prediction_matrix: np.ndarray
-        Rotamer prediction matrix (n, 388)
-
-    Returns
-    -------
-    reduced_prediction_matrix: np.ndarray
-        Reduced rotamer prediction matrix (n, 20)
-
-    """
-    _, _, reduction_guide = get_rotamer_codec(return_reduction_guide=True)
-    return np.add.reduceat(prediction_matrix, reduction_guide, axis=1)
+    return flat_dataset_map, pdbs_set
 
 
 def load_batch(
@@ -454,8 +375,7 @@ def load_batch(
 
 
 def convert_dataset_map_for_srb(
-    flat_dataset_map: list,
-    model_name: str,
+    flat_dataset_map: np.ndarray,
     path_to_benchmark_map: Path,
 ):
     """
@@ -463,10 +383,10 @@ def convert_dataset_map_for_srb(
 
     Parameters
     ----------
-    flat_dataset_map: list
-        Dataset map list
-    model_name: str
-        Name of model
+    flat_dataset_map: np.ndarray
+        Dataset map array
+    path_to_benchmark_map: Path
+        Path to the benchmark dataset map file
     """
     count_dict = {}
     for i, (pdb, chain, res_idx, _) in enumerate(flat_dataset_map):
@@ -484,32 +404,6 @@ def convert_dataset_map_for_srb(
         d.write("ignore_uncommon False\ninclude_pdbs\n##########\n")
         for pdb, count in count_dict.items():
             d.write(f"{pdb} {count}\n")
-
-
-def save_consensus_probs(
-    pdb_to_consensus_prob: dict, model_name: str, path_to_output: Path = Path.cwd()
-):
-    """
-    Saves consensus sequence into PDBench-compatible format.
-
-    Parameters
-    ----------
-    pdb_to_consensus_prob: dict
-        Dictionary {pdb_code: consensus_probabilities}
-    model_name: dict
-        Name of the model
-    path_to_output: Path
-        Path to output directory. Defaults to current working directory.
-
-    """
-    path_to_consensus = path_to_output / f"{model_name}_consensus.txt"
-    with open(path_to_consensus, "w") as d, open(
-        f"{model_name}_consensus.csv", "a"
-    ) as p:
-        d.write("ignore_uncommon False\ninclude_pdbs\n##########\n")
-        for pdb, predictions in pdb_to_consensus_prob.items():
-            d.write(f"{pdb} {len(predictions)}\n")
-            np.savetxt(p, predictions, delimiter=",")
 
 
 def save_dict_to_fasta(
@@ -536,17 +430,17 @@ def save_dict_to_fasta(
 
 
 def extract_sequence_from_pred_matrix(
-    flat_dataset_map: t.List[t.Tuple],
+    flat_dataset_map: np.ndarray,
     prediction_matrix: np.ndarray,
-) -> (dict, dict, dict, dict, dict):
+) -> t.Tuple[t.Dict[str, t.Dict[str, str]], t.Dict[str, np.ndarray]]:
     """
     Extract sequence from prediction matrix and create pdb_to_sequence and
     pdb_to_probability dictionaries
 
     Parameters
     ----------
-    flat_dataset_map: t.List[t.Tuple]
-        List of tuples with the order
+    flat_dataset_map: np.ndarray
+        Array of tuples with the order
         [... (pdb_code, chain_id, residue_id,  residue_label, encoded_residue) ...]
     prediction_matrix: np.ndarray
         Prediction matrix for each of the sequence
@@ -554,37 +448,27 @@ def extract_sequence_from_pred_matrix(
     Returns
     -------
     pdb_to_sequence: dict
-        Dictionary {pdb_code: predicted_sequence}
-    pdb_to_real_sequence: dict
-        Dictionary {pdb_code: sequence}
+        Dictionary {pdb_code: {'wildtype': wildtype_sequence, 'argmax': argmax_sequence}}
     pdb_to_probability: dict
         Dictionary {pdb_code: probability}
     """
-    pdb_to_sequence = {}
-    pdb_to_real_sequence = {}
-    pdb_to_probability = {}
+    pdb_sequences = defaultdict(lambda: {'wildtype': '', 'argmax': ''})
+    pdb_to_probability = defaultdict(list)
 
-    res_to_r_dic = dict(zip(standard_amino_acids.values(), standard_amino_acids.keys()))
+    res_to_r_dic = {v: k for k, v in standard_amino_acids.items()}
     res_dic = list(standard_amino_acids.keys())
-    # Extract max idx for prediction matrix:
     max_idx = np.argmax(prediction_matrix, axis=1)
-    # Loop through dataset map to create dictionaries:
-    for i in range(len(flat_dataset_map)):
-        pdb_chain, chain, _, res = flat_dataset_map[i]
-        pdb_chain += chain
-        # Prepare the dictionaries:
-        if pdb_chain not in pdb_to_sequence:
-            pdb_to_sequence[pdb_chain] = ""
-            pdb_to_real_sequence[pdb_chain] = ""
-            pdb_to_probability[pdb_chain] = []
 
-        pred = list(prediction_matrix[i])
+    for i, (pdb, chain, _, res) in enumerate(flat_dataset_map):
+        pdb_chain = pdb + chain
+        pred = prediction_matrix[i].tolist()
         curr_res = res_dic[max_idx[i]]
-        pdb_to_probability[pdb_chain].append(pred)
-        pdb_to_sequence[pdb_chain] += curr_res
-        pdb_to_real_sequence[pdb_chain] += res_to_r_dic[res]
 
-    return pdb_to_sequence, pdb_to_probability, pdb_to_real_sequence
+        pdb_to_probability[pdb_chain].append(pred)
+        pdb_sequences[pdb_chain]['argmax'] += curr_res
+        pdb_sequences[pdb_chain]['wildtype'] += res_to_r_dic[res]
+
+    return dict(pdb_sequences), dict(pdb_to_probability)
 
 
 def create_map_alphanumeric_code(property_map: np.ndarray, k: int = 32) -> str:

@@ -18,17 +18,17 @@ from stmol import showmol
 
 import ampal
 from aposteriori.data_prep.create_frame_data_set import Codec, make_frame_dataset
-from design_utils.analyse_utils import (
-    calculate_metrics,
-    calculate_seq_metrics,
+from analysis.sequence import (
+    SequenceMetricsCalculator,
+    calculate_ui_metrics,
+    calculate,
     create_sequence_logo,
     encode_sequence_to_onehot,
 )
-from design_utils.utils import (
+from design.data_utils import (
     convert_seq_to_property,
     create_map_alphanumeric_code,
     create_residue_map_from_pdb,
-    get_rotamer_codec,
     lookup_blosum62,
     modify_pdb_with_input_property,
     rm_tree,
@@ -43,12 +43,12 @@ st.set_page_config(page_title="TIMED Design")
 # {{{ Cached Wrappers
 @st.cache(show_spinner=False)
 def _calculate_seq_metrics_wrapper(seq: str):
-    return calculate_seq_metrics(seq)
+    return SequenceMetricsCalculator.calculate(seq)
 
 
 @st.cache(show_spinner=False)
 def _calculate_metrics_wrapper(pdb_to_sequence: dict, pdb_to_real_sequence: dict):
-    return calculate_metrics(pdb_to_sequence, pdb_to_real_sequence)
+    return calculate_ui_metrics(pdb_to_sequence, pdb_to_real_sequence)
 
 
 @st.cache(show_spinner=False)
@@ -499,11 +499,11 @@ def _draw_output_section(
     datamap_to_idx = dict(zip(f_3, range(len(f_3))))
     chain_id = selected_dataset_map[:, 1]
 
-    unique_key = f"option_{chain_id}" # This is necessary to force the selectbox to update
+    unique_key = (
+        f"option_{chain_id}"  # This is necessary to force the selectbox to update
+    )
     option = st.selectbox(
-        "Explore probabilities at specific positions:",
-        options=f_3,
-        key=unique_key
+        "Explore probabilities at specific positions:", options=f_3, key=unique_key
     )
     if "reload" in st.session_state.keys():
         pdb_session2 = show_pdb(selected_pdb[:4], st.session_state[unique_key])
@@ -513,7 +513,9 @@ def _draw_output_section(
         df = pd.DataFrame(vals)
         df.fillna(0, inplace=True)
         df.index = flat_categories
-        st.subheader(f"Probability Distribution at position {st.session_state[unique_key]}")
+        st.subheader(
+            f"Probability Distribution at position {st.session_state[unique_key]}"
+        )
         st.bar_chart(df, use_container_width=False)
     # Plot Residue Composition:
     st.write("Residue Composition")

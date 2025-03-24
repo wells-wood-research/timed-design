@@ -9,11 +9,10 @@ from typing import List, Optional, Tuple
 import numpy as np
 import tensorflow as tf
 from numpy import genfromtxt
-from tensorflow.python.keras.metrics import top_k_categorical_accuracy
 from tqdm import tqdm
 
-from design_utils.sampling_utils import apply_temp_to_probs, sample_with_multiprocessing
-from design_utils.utils import (
+from design.sampling import apply_temp_to_probs, sample_with_multiprocessing
+from design.data_utils import (
     convert_dataset_map_for_srb,
     create_flat_dataset_map,
     extract_sequence_from_pred_matrix,
@@ -27,10 +26,7 @@ class ResidueTarget:
     chain: str
     resnum: int
     target_aa: Optional[str] = None  # None = wild-type
-
-
-def top_3_cat_acc(y_true, y_pred):
-    return top_k_categorical_accuracy(y_true, y_pred, k=3)
+    seq_idx: Optional[int] = None    # Internal index in the sequence array
 
 
 def get_residue_index_map(flat_dataset_map: np.ndarray) -> Tuple[np.ndarray, dict]:
@@ -56,12 +52,135 @@ def get_residue_index_map(flat_dataset_map: np.ndarray) -> Tuple[np.ndarray, dic
     sorted_map = flat_dataset_map[sorted_indices]
 
     residue_to_index = {
-        (row[0], row[1], int(row[2])): i
-        for i, row in enumerate(sorted_map)
+        (row[0], row[1], int(row[2])): i for i, row in enumerate(sorted_map)
     }
 
     return sorted_map, residue_to_index
 
+
+def resolve_fix_targets(
+    flat_dataset_map: np.ndarray,
+    residue_to_index: t.Dict[Tuple[str, str, int], int],
+    residues_to_fix: Optional[List[ResidueTarget]] = None,
+    residues_to_redesign: Optional[List[ResidueTarget]] = None,
+) -> List[ResidueTarget]:
+    """
+    Resolves the final list of residues to fix based on the design policy.
+
+    Parameters
+    ----------
+    flat_dataset_map : np.ndarray
+        Dataset map with columns [pdb_id, chain_id, resnum, ...]
+    residue_to_index : dict
+        Mapping (pdb_id, chain, resnum) -> index
+    residues_to_fix : list of ResidueTarget
+        Explicitly fixed residues (wild-type or mutant)
+    residues_to_redesign : list of ResidueTarget
+        Residues explicitly marked for redesign
+
+    Returns
+    -------
+    final_fix_targets : list of ResidueTarget
+        All residues that must be fixed (including derived from policy).
+    """
+    fix_set = {(r.pdb_id, r.chain, r.resnum) for r in residues_to_fix or []}
+    redesign_set = {(r.pdb_id, r.chain, r.resnum) for r in residues_to_redesign or []}
+
+    # Check for overlap
+    overlap = fix_set & redesign_set
+    assert len(overlap) > 0, f"Overlap between residues to fix and redesign: {overlap}"
+
+    final_fix_targets = []
+
+    if not residues_to_fix and not residues_to_redesign:
+        # Case 1: redesign everything → nothing is fixed
+        return []
+
+    elif residues_to_redesign and not residues_to_fix:
+        # Case 2: redesign only some → fix everything else to wild-type
+        for row in flat_dataset_map:
+            key = (row[0], row[1], int(row[2]))
+            if key not in redesign_set:
+                final_fix_targets.append(
+                    ResidueTarget(
+                        pdb_id=row[0], chain=row[1], resnum=int(row[2]), target_aa=None
+                    )
+                )
+        return final_fix_targets
+
+    elif residues_to_fix and not residues_to_redesign:
+        # Case 3: fix only some → redesign everything else
+        return residues_to_fix
+
+    elif residues_to_fix and residues_to_redesign:
+        # Case 4: redesign some, fix some, fix everything else to wild-type
+        fixed_keys = fix_set
+        for row in flat_dataset_map:
+            key = (row[0], row[1], int(row[2]))
+            if key in redesign_set:
+                continue  # redesign
+            if key in fixed_keys:
+                continue  # already fixed (to WT or mutant)
+            final_fix_targets.append(
+                ResidueTarget(
+                    pdb_id=row[0], chain=row[1], resnum=int(row[2]), target_aa=None
+                )
+            )
+        # Add explicitly fixed ones
+        final_fix_targets.extend(residues_to_fix)
+        return final_fix_targets
+
+
+def apply_residue_fixes(
+    pdb_to_sequence: t.Dict[str, t.Dict[str, List[str]]],
+    residue_to_index: t.Dict[Tuple[str, str, int], int],
+    fix_targets: List[ResidueTarget],
+) -> t.Dict[str, t.Dict[str, List[str]]]:
+    """
+    Applies residue fixes to each sequence in pdb_to_sequence using index map and target info.
+
+    Parameters
+    ----------
+    pdb_to_sequence : dict
+        {pdb_chain: {'wildtype': [...], 'argmax': [...], 'sampled': [seq1, seq2, ...]}}
+    residue_to_index : dict
+        Mapping from (pdb_id, chain, resnum) → sequence index.
+    fix_targets : List[ResidueTarget]
+        Residues to fix (to wild-type or specific amino acid).
+
+    Returns
+    -------
+    pdb_to_sequence : dict
+        Same structure but with fixed residues applied to all sequences.
+    """
+    for target in fix_targets:
+        key = (target.pdb_id, target.chain, target.resnum)
+        if key not in residue_to_index:
+            raise ValueError(f"Residue {key} not found in dataset map.")
+        idx = residue_to_index[key]
+        pdb_chain = f"{target.pdb_id}{target.chain}"
+
+        if pdb_chain not in pdb_to_sequence:
+            raise ValueError(f"{pdb_chain} not found in predicted sequences.")
+
+        # Determine target amino acid
+        aa_to_fix = (
+            pdb_to_sequence[pdb_chain]["wildtype"][idx]
+            if target.target_aa is None
+            else target.target_aa
+        )
+
+        # Fix in argmax
+        pdb_to_sequence[pdb_chain]["argmax"][idx] = aa_to_fix
+
+        # Fix in each sampled sequence
+        fixed_samples = []
+        for sample in pdb_to_sequence[pdb_chain]["sampled"]:
+            fixed_sample = sample[:idx] + aa_to_fix + sample[idx + 1 :]
+            fixed_samples.append(fixed_sample)
+        pdb_to_sequence[pdb_chain]["sampled"] = fixed_samples
+
+    return pdb_to_sequence
 
 
 def load_dataset_and_predict(
@@ -109,9 +228,6 @@ def load_dataset_and_predict(
         Dictionary {pdb_code: consensus_probability}
     """
     # assume user passed HDF5 file TODO: Do this for PDB inputs as well
-
-    # Import top3 accuracy:
-    tf.keras.utils.get_custom_objects()["top_3_cat_acc"] = top_3_cat_acc
     path_to_datasetmap = path_to_output / f"{dataset_path.stem}.txt"
 
     # If dataset map exists, load it from path:
@@ -119,7 +235,7 @@ def load_dataset_and_predict(
         flat_dataset_map = genfromtxt(path_to_datasetmap, delimiter=",", dtype="str")
     else:
         # Create flat_map:
-        flat_dataset_map, training_set_pdbs = create_flat_dataset_map(
+        flat_dataset_map, pdbs_set = create_flat_dataset_map(
             dataset_path,
         )
         # Save flat map to file:
@@ -134,7 +250,9 @@ def load_dataset_and_predict(
     # Import Model:
     frame_model = tf.keras.models.load_model(model)
     # Create output file for model:
-    path_to_prediction_probs = path_to_output / f"{dataset_path.stem}_model_{model_name}.csv"
+    path_to_prediction_probs = (
+        path_to_output / f"{dataset_path.stem}_model_{model_name}.csv"
+    )
     # Load batch:
     for index in tqdm(
         range(0, n_batches),
@@ -156,22 +274,19 @@ def load_dataset_and_predict(
 
     flat_dataset_map = np.array(flat_dataset_map)
     # Create output file for model:
-    path_to_benchmark_map = path_to_output / f"{dataset_path.stem}_model_{model_name}.txt"
+    path_to_benchmark_map = (
+        path_to_output / f"{dataset_path.stem}_model_{model_name}.txt"
+    )
     # Output datasetmap compatible with sequence recovery benchmark:
-    convert_dataset_map_for_srb(flat_dataset_map, model_name, path_to_benchmark_map)
+    convert_dataset_map_for_srb(flat_dataset_map, path_to_benchmark_map)
     # Load prediction matrix
     prediction_matrix = genfromtxt(
         path_to_prediction_probs, delimiter=",", dtype=np.float16
     )
     # Apply temperature factor to prediction matrix:
-    if temperature != 1:
-        prediction_matrix = apply_temp_to_probs(prediction_matrix, t=temperature)
+    prediction_matrix = apply_temp_to_probs(prediction_matrix, t=temperature)
 
-    (
-        pdb_to_sequence,
-        pdb_to_probability,
-        pdb_to_real_sequence,
-    ) = extract_sequence_from_pred_matrix(
+    (pdb_to_sequence, pdb_to_probability,) = extract_sequence_from_pred_matrix(
         flat_dataset_map,
         prediction_matrix,
     )
@@ -180,7 +295,22 @@ def load_dataset_and_predict(
     pdb_to_sampled = sample_with_multiprocessing(
         workers, pdb_codes, sample_n, pdb_to_probability
     )
+    # Merge dictionaries (keys are the same)
+    for pdb in pdb_to_sequence:
+        pdb_to_sequence[pdb]["sampled"] = pdb_to_sampled[pdb]
 
+    # Resolve residue fixes
+    fix_targets = resolve_fix_targets(
+        flat_dataset_map,
+        residue_to_index,
+        residues_to_fix=residues_to_fix,
+        residues_to_redesign=residues_to_redesign,
+    )
+    # Apply residue fixes
+    pdb_to_sequence = apply_residue_fixes(
+        pdb_to_sequence, residue_to_index, fix_targets
+    )
+    raise ValueError
 
 
 def _check_residue_format(
@@ -273,9 +403,8 @@ def main(args):
         batch_size=args.batch_size,
         path_to_output=args.path_to_output,
         sample_n=args.sample_n,
-        temperature=1,
+        temperature=args.temperature,
         workers=args.workers,
-
     )
 
 
@@ -307,6 +436,12 @@ if __name__ == "__main__":
         help="Number of samples to be drawn from the distribution.",
     )
     parser.add_argument(
+        "--temperature",
+        type=float,
+        default=1,
+        help="Temperature factor to apply to softmax prediction. (default: 1.0 - unchanged)",
+    )
+    parser.add_argument(
         "--residues_to_fix",
         type=str,
         default=None,
@@ -314,7 +449,6 @@ if __name__ == "__main__":
             "Comma-separated list of residues to fix. Format: <chain><resnum> for wild-type (e.g., A12), or <chain><resnum><AA> to fix to specific amino acid (e.g., A12P)."
         ),
     )
-
     parser.add_argument(
         "--residues_to_redesign",
         type=str,

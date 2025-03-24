@@ -6,10 +6,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from ampal.amino_acids import standard_amino_acids
 
-from design_utils.analyse_utils import tag_pdb_with_rot
-from design_utils.utils import (
+from analysis.sequence import tag_pdb_with_rot
+from design.data_utils import (
     get_rotamer_codec,
 )
 

@@ -7,7 +7,8 @@ import pandas as pd
 # import pymol
 import seaborn as sns
 
-from design_utils.analyse_utils import extract_packdensity_from_ampal, extract_bfactor_from_ampal, extract_prediction_entropy_to_dict
+from analysis.sequence import extract_prediction_entropy_to_dict
+from scripts.analyse_all_properties import extract_bfactor_from_ampal, extract_packdensity_from_ampal
 
 plt.style.use(["ipynb", "use_mathtext", "colors5-light"])
 

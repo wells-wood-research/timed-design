@@ -1,4 +1,3 @@
-import json
 import typing as t
 from itertools import repeat
 from multiprocessing import Pool
@@ -6,7 +5,7 @@ from multiprocessing import Pool
 import numpy as np
 from ampal.amino_acids import standard_amino_acids
 
-from design_utils.analyse_utils import SequenceMetrics, calculate_seq_metrics
+from analysis.sequence import SequenceMetrics, SequenceMetricsCalculator, calculate
 
 
 def save_as(pdb_to_sampled: dict, filename: str, mode: str):
@@ -24,19 +23,14 @@ def save_as(pdb_to_sampled: dict, filename: str, mode: str):
     """
     output_paths = []
     print(f"Saving sampled sequences in mode {mode}")
-    if mode != "fasta":
-        outfile_path = f"{filename}.json"
-        output_paths.append(outfile_path)
-        with open(outfile_path, "w") as outfile:
-            json.dump(pdb_to_sampled, outfile)
-    if mode != "json":
-        outfile_path = f"{filename}.fasta"
-        output_paths.append(outfile_path)
-        with open(outfile_path, "w") as outfile:
-            for pdb, seq_list in pdb_to_sampled.items():
-                for i, seq in enumerate(seq_list):
-                    outfile.write(f">{pdb}_{i}\n")
-                    outfile.write(f"{seq[0]}\n")  # the first item is the seq
+
+    outfile_path = f"{filename}.fasta"
+    output_paths.append(outfile_path)
+    with open(outfile_path, "w") as outfile:
+        for pdb, seq_list in pdb_to_sampled.items():
+            for i, seq in enumerate(seq_list):
+                outfile.write(f">{pdb}_{i}\n")
+                outfile.write(f"{seq[0]}\n")  # the first item is the seq
     print("Saving Metrics")
     outfile_path = f"{filename}_metrics.csv"
     output_paths.append(outfile_path)
@@ -116,11 +110,10 @@ def sample_from_sequences(
         # Join seq from residue list to one string
         sampled_seq = "".join(seq_list)
         # Calculate sequence metrics
-        metrics_tuple = calculate_seq_metrics(sampled_seq)
+        metrics_tuple = SequenceMetricsCalculator.calculate(sampled_seq)
         sampled_seq_list.append((sampled_seq, metrics_tuple))
 
-
-    return {pdb: sampled_seq_list}
+    return {pdb: {"sampled": sampled_seq_list}}
 
 
 def apply_temp_to_probs(probs: np.ndarray, t: float = 1.0):
@@ -143,13 +136,19 @@ def apply_temp_to_probs(probs: np.ndarray, t: float = 1.0):
         2D Probability Array with t applied to it.
 
     """
-    probs = np.array(probs) ** (1 / t)
-    p_sum = np.sum(probs, axis=1)
-    return probs / p_sum[:, None]
+    if t != 1.0:
+        probs = np.array(probs) ** (1 / t)
+        p_sum = np.sum(probs, axis=1)
+        return probs / p_sum[:, None]
+    else:
+        return probs
 
 
 def sample_with_multiprocessing(
-    workers, pdb_codes, sample_n, pdb_to_probability,
+    workers,
+    pdb_codes,
+    sample_n,
+    pdb_to_probability,
 ):
     """
 
