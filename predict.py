@@ -26,7 +26,7 @@ class ResidueTarget:
     chain: str
     resnum: int
     target_aa: Optional[str] = None  # None = wild-type
-    seq_idx: Optional[int] = None    # Internal index in the sequence array
+    seq_idx: Optional[int] = None  # Internal index in the sequence array
 
 
 def get_residue_index_map(flat_dataset_map: np.ndarray) -> Tuple[np.ndarray, dict]:
@@ -67,6 +67,8 @@ def resolve_fix_targets(
     """
     Resolves the final list of residues to fix based on the design policy.
 
+    Ensures all returned ResidueTarget objects have seq_idx filled.
+
     Parameters
     ----------
     flat_dataset_map : np.ndarray
@@ -83,12 +85,23 @@ def resolve_fix_targets(
     final_fix_targets : list of ResidueTarget
         All residues that must be fixed (including derived from policy).
     """
+
+    def _with_seq_idx(r: ResidueTarget) -> ResidueTarget:
+        key = (r.pdb_id, r.chain, r.resnum)
+        return ResidueTarget(
+            pdb_id=r.pdb_id,
+            chain=r.chain,
+            resnum=r.resnum,
+            target_aa=r.target_aa,
+            seq_idx=residue_to_index.get(key),
+        )
+
     fix_set = {(r.pdb_id, r.chain, r.resnum) for r in residues_to_fix or []}
     redesign_set = {(r.pdb_id, r.chain, r.resnum) for r in residues_to_redesign or []}
 
-    # Check for overlap
     overlap = fix_set & redesign_set
-    assert len(overlap) > 0, f"Overlap between residues to fix and redesign: {overlap}"
+    if overlap:
+        raise ValueError(f"Overlap between residues to fix and redesign: {overlap}")
 
     final_fix_targets = []
 
@@ -103,32 +116,38 @@ def resolve_fix_targets(
             if key not in redesign_set:
                 final_fix_targets.append(
                     ResidueTarget(
-                        pdb_id=row[0], chain=row[1], resnum=int(row[2]), target_aa=None
+                        pdb_id=row[0],
+                        chain=row[1],
+                        resnum=int(row[2]),
+                        target_aa=None,
+                        seq_idx=residue_to_index[key],
                     )
                 )
         return final_fix_targets
 
     elif residues_to_fix and not residues_to_redesign:
         # Case 3: fix only some → redesign everything else
-        return residues_to_fix
+        return [_with_seq_idx(r) for r in residues_to_fix]
 
     elif residues_to_fix and residues_to_redesign:
         # Case 4: redesign some, fix some, fix everything else to wild-type
         fixed_keys = fix_set
         for row in flat_dataset_map:
             key = (row[0], row[1], int(row[2]))
-            if key in redesign_set:
-                continue  # redesign
-            if key in fixed_keys:
-                continue  # already fixed (to WT or mutant)
+            if key in redesign_set or key in fixed_keys:
+                continue
             final_fix_targets.append(
                 ResidueTarget(
-                    pdb_id=row[0], chain=row[1], resnum=int(row[2]), target_aa=None
+                    pdb_id=row[0],
+                    chain=row[1],
+                    resnum=int(row[2]),
+                    target_aa=None,
+                    seq_idx=residue_to_index[key],
                 )
             )
-        # Add explicitly fixed ones
-        final_fix_targets.extend(residues_to_fix)
+        final_fix_targets.extend(_with_seq_idx(r) for r in residues_to_fix)
         return final_fix_targets
+
 
 
 def apply_residue_fixes(
